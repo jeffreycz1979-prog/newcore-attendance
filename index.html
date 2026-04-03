@@ -268,7 +268,59 @@ function updateSt(i, s) {
     onDateChange();
   });
 }
+// --- 補回總表功能 ---
+function onSumClassChange() {
+  var cls = document.getElementById('sum-class-sel').value;
+  var wrap = document.getElementById('summary-wrap');
+  if (!cls) { wrap.innerHTML = '<div class="empty">請選擇班級</div>'; return; }
+  
+  wrap.innerHTML = '<div class="loading">正在讀取全班總表...</div>';
+  
+  jsonpCall({ action: 'getClassSummary', className: cls }, function(err, data) {
+    if (err || !data || data.error) { 
+      wrap.innerHTML = '<div class="empty">讀取失敗：' + (data ? data.error : '網路錯誤') + '</div>'; 
+      return; 
+    }
+    summaryData = data;
+    renderSummaryTable();
+  });
+}
 
+function renderSummaryTable() {
+  if (!summaryData) return;
+  var lessons = summaryData.lessons;
+  var students = summaryData.students;
+  
+  var html = '<div class="summary-table-wrap"><table class="summary-table"><thead><tr>';
+  html += '<th style="position:sticky; left:0; background:#274e13; z-index:3; min-width:80px;">學生</th>';
+  
+  // 生成每一堂課的標題
+  lessons.forEach(function(l) {
+    html += '<th>' + l.unit + '<br><span style="font-weight:400; font-size:10px;">' + l.lesson + '</span></th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  // 填入每個學生的資料
+  students.forEach(function(st) {
+    html += '<tr>';
+    html += '<td style="position:sticky; left:0; background:white; z-index:1; font-weight:600; border-right:1px solid #eee;">' + (st.eName || st.cName) + '</td>';
+    
+    st.lessonRecords.forEach(function(rec) {
+      var att = rec.att || '·';
+      var score = rec.score || '-';
+      // 根據符號給顏色
+      var color = SYM_COLOR[att] || '#999';
+      html += '<td>';
+      html += '<span style="font-weight:700; color:' + color + ';">' + att + '</span>';
+      html += '<br><span style="font-size:10px; color:#aaa;">' + score + '</span>';
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  document.getElementById('summary-wrap').innerHTML = html;
+}
 // --- 工具 ---
 function jsonpCall(p, cb) {
   var name = '__nc' + cbCounter++;
