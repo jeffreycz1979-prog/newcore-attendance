@@ -797,34 +797,76 @@ function clearScore() {
 }
 
 // ── 語音辨識 ─────────────────────────────────────
-function toggleMic(){
-  if(isListening){stopMic();return;}
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){setStatus('❌ 請改用 Chrome','err');return;}
-  if(!classData){setStatus('❌ 請先選班級與堂次','err');return;}
-  recognition=new SR();
-  recognition.lang='zh-TW'; recognition.continuous=true; recognition.interimResults=false;
-  recognition.onstart=function(){
-    isListening=true;
-    document.getElementById('mic-btn').className='mic-btn listening';
-    document.getElementById('mic-btn').textContent='🔴 聆聽中... (再按停止)';
-    setStatus('聆聽中 ── 可說「全班到」「Amy 缺席」「Brian 90分」','info');
-  };
-  recognition.onresult=function(e){
-    var text=e.results[e.results.length-1][0].transcript.trim();
-    addLog('🎙 '+text,true); processVoice(text);
-  };
-  recognition.onerror=function(e){setStatus('錯誤：'+e.error,'err');stopMic();};
-  recognition.onend=function(){if(isListening)recognition.start();};
-  recognition.start();
+// --- 替換原本的語音辨識邏輯 ---
+var mediaRecorder;
+var audioChunks = [];
+
+function toggleMic() {
+  if (isListening) { stopMic(); return; }
+  
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('❌ 瀏覽器不支援錄音', 'err'); return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64Data = reader.result.split(',')[1];
+          sendToGemini(base64Data);
+        };
+      };
+      mediaRecorder.start();
+      isListening = true;
+      document.getElementById('mic-btn').className = 'mic-btn listening';
+      document.getElementById('mic-btn').textContent = '🔴 錄音中... (再按停止)';
+      setStatus('錄製中，說完請再按一次按鈕...', 'info');
+    });
 }
-function stopMic(){
-  isListening=false; if(recognition)recognition.stop();
-  document.getElementById('mic-btn').className='mic-btn';
-  document.getElementById('mic-btn').textContent='🎤 開始語音點名';
-  setStatus('已停止聆聽','');
+
+function stopMic() {
+  if (mediaRecorder && isListening) {
+    mediaRecorder.stop();
+    isListening = false;
+    document.getElementById('mic-btn').className = 'mic-btn';
+    document.getElementById('mic-btn').textContent = '🎤 開始語音點名';
+    setStatus('🤖 Gemini 正在辨識中...', 'info');
+  }
 }
-function processVoice(text){
+
+function sendToGemini(base64Data) {
+  var className = document.getElementById('class-sel').value;
+  var attCol = document.getElementById('date-sel').value;
+  if (!className || !attCol) { setStatus('❌ 請選班級', 'err'); return; }
+
+  // 這裡是發送給 GAS 的接口
+  jsonpCall({
+    action: 'processVoice',
+    className: className,
+    attCol: attCol,
+    audioData: base64Data
+  }, function(err, result) {
+    if (err || (result && result.error)) {
+      setStatus('❌ 辨識失敗：' + (result ? result.error : '網路錯誤'), 'err');
+      return;
+    }
+    if (result.ok) {
+      // 顯示幽默評論
+      var joke = (result.data && result.data[0]) ? result.data[0].comment : "完成！";
+      alert("🤖 Gemini 評論：\n" + joke);
+      
+      setStatus(result.msg, 'ok');
+      addLog(result.msg, true);
+      onDateChange(); // 刷新表格
+    }
+  });
+}
   if(!classData) return;
   var lower=text.toLowerCase().replace(/\s/g,'');
   var isAllCmd=false;
