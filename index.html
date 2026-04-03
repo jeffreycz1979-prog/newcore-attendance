@@ -30,10 +30,18 @@
   .info-box { background: #f8f9fa; border-radius: 8px; padding: 8px 10px; text-align: center; }
   .info-box .val { font-size: 15px; font-weight: 700; color: #274e13; }
   .info-box .lbl { font-size: 10px; color: #999; margin-top: 2px; }
-  .mic-btn { width: 100%; padding: 13px; font-size: 15px; font-weight: 700;
-             border-radius: 10px; border: none; background: #274e13; color: white; cursor: pointer; margin-bottom: 10px; }
-  .mic-btn.listening { background: #c0392b; animation: pulse 1.2s infinite; }
+
+  /* ── 麥克風按鈕區 ── */
+  .mic-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .mic-btn { flex: 1; padding: 13px; font-size: 15px; font-weight: 700;
+             border-radius: 10px; border: none; background: #274e13; color: white; cursor: pointer; }
+  .mic-btn.recording  { background: #c0392b; animation: pulse 1.2s infinite; }
+  .mic-btn.processing { background: #1a5276; }
+  .mic-btn:disabled   { opacity: .55; cursor: not-allowed; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+  .rec-timer { font-size: 12px; color: #c0392b; font-weight: 700; min-width: 36px;
+               display: flex; align-items: center; justify-content: center; }
+
   .status-bar { text-align: center; padding: 9px 12px; border-radius: 8px; font-size: 12px;
                 background: #eee; color: #666; min-height: 36px;
                 display: flex; align-items: center; justify-content: center; line-height: 1.5; }
@@ -45,6 +53,18 @@
   .hint-box b { color: #274e13; }
   .att-summary { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; }
   .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+
+  /* Gemini 結果卡片 */
+  .gemini-result { background: #e8f0fe; border-radius: 10px; padding: 10px 14px;
+                   margin-top: 10px; font-size: 12px; display: none; }
+  .gemini-result .gr-title { font-weight: 700; color: #1a5276; margin-bottom: 6px; font-size: 13px; }
+  .gemini-item { display: flex; align-items: center; gap: 8px; padding: 4px 0;
+                 border-bottom: 1px solid rgba(0,0,0,.06); }
+  .gemini-item:last-child { border-bottom: none; }
+  .gemini-name    { font-weight: 700; min-width: 80px; }
+  .gemini-sym     { font-size: 16px; }
+  .gemini-score   { color: #185FA5; font-weight: 700; }
+  .gemini-comment { color: #666; font-size: 11px; font-style: italic; flex: 1; }
 
   /* 點名表格 */
   .att-table { width: 100%; border-collapse: collapse; }
@@ -153,7 +173,6 @@
   .summary-table tr:nth-child(even) td.name-col { background: #fafafa; }
   .summary-table tr:hover td { background: #fffde7 !important; }
 
-  /* 可點擊的格子 */
   .cell-att { cursor: pointer; border-radius: 4px; padding: 2px 4px; transition: background .15s; }
   .cell-att:hover { background: #e8f0fe; outline: 2px solid #274e13; }
   .cell-score { cursor: pointer; border-radius: 4px; padding: 2px 4px;
@@ -173,7 +192,6 @@
   .alert-count { font-weight: 700; }
   .alert-count.has-issue { color: #c0392b; }
 
-  /* 儲存提示 */
   .save-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
                 background: #274e13; color: white; padding: 8px 20px; border-radius: 20px;
                 font-size: 13px; font-weight: 600; z-index: 3000;
@@ -199,6 +217,7 @@
     <button onclick="saveApi()">連線</button>
   </div>
 
+
   <!-- ══ 點名頁 ══ -->
   <div class="page active" id="page-attend">
     <div class="card">
@@ -218,13 +237,24 @@
     </div>
     <div id="attend-main" style="display:none;">
       <div class="card">
-        <button class="mic-btn" id="mic-btn">🎤 開始語音點名</button>
+        <div class="mic-row">
+          <button class="mic-btn" id="mic-btn" onclick="toggleMic()">🎤 開始錄音點名</button>
+          <div class="rec-timer" id="rec-timer" style="display:none;">0s</div>
+        </div>
         <div class="status-bar" id="status-bar">選擇堂次後可開始點名</div>
         <div class="att-summary" id="attend-summary"></div>
+
+        <!-- Gemini 辨識結果預覽 -->
+        <div class="gemini-result" id="gemini-result">
+          <div class="gr-title">🤖 Gemini 辨識結果</div>
+          <div id="gemini-items"></div>
+        </div>
+
         <div class="hint-box">
+          🎙 <b>按下按鈕開始錄音</b>，說完再按一次停止，Gemini 自動辨識並寫入<br>
           🌐 <b>全班：</b>全班到 / 全班缺席 / 全班請假<br>
-          🔀 <b>例外：</b>全班到，只有 Amy 缺席 / 除了 Brian 請假，其他都到<br>
-          👤 <b>單人：</b>Amy 到了 / Brian 請假 / 缺席 / 遲到 / 補課缺席 / 補課請假<br>
+          🔀 <b>例外：</b>全班到，只有 Amy 缺席<br>
+          👤 <b>單人：</b>Amy 到了 / Brian 請假 / 缺席 / 遲到<br>
           🔢 <b>分數：</b>Amy 90分 ── 或點分數欄用<b>轉盤</b>輸入
         </div>
       </div>
@@ -302,41 +332,52 @@ var API_URL       = localStorage.getItem('nc_api_url') || '';
 var classData     = null;
 var summaryData   = null;
 var availDates    = [];
-var recognition   = null;
-var isListening   = false;
 var lastMatchIdx  = -1;
 var cbCounter     = 0;
 var currentFilter = 'all';
 
+// Gemini
+var GEMINI_API_KEY = '';
+var GEMINI_URL     = '';
+function updateGeminiUrl() {
+  GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY;
+}
+
+function loadGeminiKey() {
+  if (!API_URL) return;
+  jsonpCall({ action: 'getGeminiKey' }, function(err, data) {
+    if (err || !data || !data.key) { console.warn('Gemini Key 載入失敗'); return; }
+    GEMINI_API_KEY = data.key;
+    updateGeminiUrl();
+    console.log('✅ Gemini Key 已載入');
+  });
+}
+
+// 錄音相關
+var mediaRecorder    = null;
+var audioChunks      = [];
+var isRecording      = false;
+var recTimerInterval = null;
+var recSeconds       = 0;
+
 // 轉盤
-var wheelStudentIdx  = -1;
-var wheelValue       = null;
-var wheelContext     = null; // { mode:'attend'|'summary', studentIdx, lessonIdx }
-var ITEM_HEIGHT      = 52;
-var QUICK_SCORES     = [60,70,75,80,85,90,95,100];
+var wheelStudentIdx = -1;
+var wheelValue      = null;
+var wheelContext    = null;
+var ITEM_HEIGHT     = 52;
+var QUICK_SCORES    = [60,70,75,80,85,90,95,100];
 
 // 出席彈窗
-var attPopupContext  = null; // { mode, studentIdx, lessonIdx, cellEl }
+var attPopupContext = null;
 
 var SYMS      = ['V','○','●','△','▲','⊝'];
 var SYMCLASS  = {'V':'sel-V','○':'sel-x1','●':'sel-x2','△':'sel-x3','▲':'sel-x4','⊝':'sel-x5'};
-var SYM_LABEL = {'V':'到 V','○':'缺席 ○','●':'補課缺席 ●','△':'請假 △','▲':'補課請假 ▲','⊝':'遲到 ⊝'};
 var SYM_SHORT = {'V':'到','○':'缺席','●':'補缺','△':'請假','▲':'補假','⊝':'遲到'};
 var SYM_BG    = {'V':'#e6f4ea','○':'#fce8e6','●':'#f5cba7','△':'#fef9e7','▲':'#fad7a0','⊝':'#e8f0fe'};
 var SYM_COLOR = {'V':'#1e7e34','○':'#c0392b','●':'#ca6f1e','△':'#d4ac0d','▲':'#ca8a04','⊝':'#1a5276'};
 var ATT_CLASS = {'V':'att-V','○':'att-o','●':'att-ob','△':'att-d','▲':'att-db','⊝':'att-l'};
-var CMD_MAP = [
-  { keywords:['補課缺席','補缺'],             sym:'●' },
-  { keywords:['補課請假','補假'],             sym:'▲' },
-  { keywords:['缺席','沒來','沒到','absent'], sym:'○' },
-  { keywords:['請假','leave'],               sym:'△' },
-  { keywords:['到了','出席','有來','都到','present','here'], sym:'V' },
-  { keywords:['遲到','late'],                sym:'⊝' }
-];
-var ALL_KEYWORDS    = ['全班','全部','所有人','大家','所有同學'];
-var EXCEPT_KEYWORDS = ['只有','除了','但是','除','不包括','排除'];
 
-// ── JSONP ────────────────────────────────────────
+// ── JSONP（一般讀寫，不含大型音訊）──────────────────
 function jsonpCall(params, callback) {
   var cbName = '__ncCb' + (cbCounter++);
   var url = API_URL + '?callback=' + cbName;
@@ -358,10 +399,45 @@ function jsonpCall(params, callback) {
   document.body.appendChild(script);
 }
 
+// ── 瀏覽器直接呼叫 Gemini API（繞過 CORS）────────────
+function callGemini(base64, mimeType, studentList, callback) {
+  var prompt = '你是點名助手。學生名單：[ ' + studentList + ' ]。\n' +
+    '請聽錄音，辨識老師說了哪些學生的出席狀況或分數。\n' +
+    '輸出純 JSON 陣列（不要加 markdown），格式：\n' +
+    '[{"name":"學生名","status":"符號","score":"分數或空字串","comment":"一句幽默評論"}]\n' +
+    '出席符號規則：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
+    '沒提到分數就填空字串。只輸出 JSON，不要其他文字。';
+
+  var payload = {
+    contents: [{ parts: [
+      { text: prompt },
+      { inline_data: { mime_type: mimeType, data: base64 } }
+    ]}],
+    generationConfig: {}
+  };
+
+  fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    console.log('Gemini raw:', JSON.stringify(data));
+    if (!data.candidates || !data.candidates[0]) {
+      var reason = (data.promptFeedback && data.promptFeedback.blockReason) || JSON.stringify(data);
+      throw new Error('Gemini 無回應：' + reason);
+    }
+    var text = data.candidates[0].content.parts[0].text;
+    var updates = JSON.parse(text.replace(/```json|```/g,'').trim());
+    callback(null, updates);
+  })
+  .catch(function(err){ callback(err); });
+}
+
 function showToast(msg) {
   var t = document.createElement('div');
-  t.className = 'save-toast';
-  t.textContent = msg;
+  t.className = 'save-toast'; t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 2000);
 }
@@ -377,15 +453,15 @@ function switchTab(tab, btn) {
 // ── 初始化 ───────────────────────────────────────
 window.addEventListener('load', function() {
   if (API_URL) document.getElementById('api-url').value = API_URL;
+
   document.getElementById('class-sel').addEventListener('change', onClassChange);
   document.getElementById('date-sel').addEventListener('change', onDateChange);
-  document.getElementById('mic-btn').addEventListener('click', toggleMic);
   document.getElementById('sum-class-sel').addEventListener('change', onSumClassChange);
   document.addEventListener('click', function(e) {
     if (!document.getElementById('att-popup').contains(e.target) &&
         !e.target.classList.contains('cell-att')) closeAttPopup();
   });
-  if (API_URL) loadClassList();
+  if (API_URL) { loadClassList(); loadGeminiKey(); }
   buildWheel();
 });
 
@@ -395,7 +471,9 @@ function saveApi() {
   API_URL = url;
   localStorage.setItem('nc_api_url', url);
   loadClassList();
+  loadGeminiKey();
 }
+
 
 function loadClassList() {
   var sel1 = document.getElementById('class-sel');
@@ -473,16 +551,6 @@ function writeOne(idx, status, score) {
   }, function(err,r){ if(!r||!r.ok) addLog('⚠️ 寫入失敗',false); });
 }
 
-function writeAll(sym, exceptIndices) {
-  if(!classData) return 0;
-  var count=0;
-  for(var i=0;i<classData.students.length;i++){
-    if(exceptIndices&&exceptIndices.indexOf(i)!==-1) continue;
-    writeOne(i,sym,null); count++;
-  }
-  return count;
-}
-
 function clickStatus(idx, sym) {
   var st=classData.students[idx];
   var newSym=st.status===sym?'':sym;
@@ -540,6 +608,167 @@ function renderAttRow(idx) {
   if(sb){var has=st.score!==''&&st.score!==null&&st.score!==undefined;sb.textContent=has?st.score:'--';sb.className='score-btn'+(has?' has-score':'');}
 }
 
+// ══ 語音錄音 → Gemini ════════════════════════════
+
+function toggleMic() {
+  if (isRecording) { stopRecording(); } else { startRecording(); }
+}
+
+function startRecording() {
+  if (!classData) { setStatus('❌ 請先選班級與堂次','err'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('❌ 瀏覽器不支援錄音，請使用 Chrome','err'); return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    // 選最佳 mimeType
+    var mimeType = 'audio/webm';
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+    else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) mimeType = 'audio/ogg;codecs=opus';
+
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+
+    mediaRecorder.addEventListener('dataavailable', function(e) {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    });
+
+    mediaRecorder.addEventListener('stop', function() {
+      stream.getTracks().forEach(function(t){ t.stop(); }); // 釋放麥克風
+      processAudio(mimeType);
+    });
+
+    mediaRecorder.start();
+    isRecording = true;
+
+    var btn = document.getElementById('mic-btn');
+    btn.textContent = '⏹ 停止錄音';
+    btn.className   = 'mic-btn recording';
+    setStatus('🔴 錄音中... 說完再按一次停止','info');
+
+    // 計時器（最多 60 秒自動停止）
+    recSeconds = 0;
+    var timer = document.getElementById('rec-timer');
+    timer.style.display = 'flex';
+    timer.textContent = '0s';
+    recTimerInterval = setInterval(function(){
+      recSeconds++;
+      timer.textContent = recSeconds + 's';
+      if (recSeconds >= 30) stopRecording();
+    }, 1000);
+
+  }).catch(function(err) {
+    setStatus('❌ 無法取得麥克風：' + err.message, 'err');
+  });
+}
+
+function stopRecording() {
+  if (!mediaRecorder || !isRecording) return;
+  isRecording = false;
+  clearInterval(recTimerInterval);
+  document.getElementById('rec-timer').style.display = 'none';
+  mediaRecorder.stop();
+
+  var btn = document.getElementById('mic-btn');
+  btn.textContent = '⏳ Gemini 辨識中...';
+  btn.className   = 'mic-btn processing';
+  btn.disabled    = true;
+  setStatus('⏳ 送出音訊，等待 Gemini 辨識...','info');
+}
+
+function processAudio(mimeType) {
+  var blob = new Blob(audioChunks, { type: mimeType });
+  var reader = new FileReader();
+  reader.onloadend = function() {
+    var base64 = reader.result.split(',')[1]; // 去掉 data:...;base64, 前綴
+    sendToGemini(base64, mimeType);
+  };
+  reader.readAsDataURL(blob);
+}
+
+function sendToGemini(base64, mimeType) {
+  if (!GEMINI_API_KEY) {
+    var btn = document.getElementById('mic-btn');
+    btn.textContent = '🎤 開始錄音點名'; btn.className = 'mic-btn'; btn.disabled = false;
+    setStatus('❌ Gemini Key 尚未載入，請重新連線', 'err'); return;
+  }
+  // 組學生名單給 Gemini 參考
+  var studentList = classData.students.map(function(s){ return s.eName || s.cName; }).join(', ');
+
+  callGemini(base64, mimeType, studentList, function(err, updates) {
+    // 恢復按鈕狀態
+    var btn = document.getElementById('mic-btn');
+    btn.textContent = '🎤 開始錄音點名';
+    btn.className   = 'mic-btn';
+    btn.disabled    = false;
+
+    if (err) {
+      setStatus('❌ Gemini 辨識失敗：' + err.message, 'err');
+      addLog('❌ Gemini 失敗：' + err.message, false);
+      return;
+    }
+    if (!updates || !updates.length) {
+      setStatus('⚠️ Gemini 未辨識到任何學生','err'); return;
+    }
+    applyGeminiResults(updates);
+  });
+}
+
+function applyGeminiResults(updates) {
+  if (!classData) return;
+  var matched = 0, skipped = 0, resultHtml = '';
+
+  updates.forEach(function(up) {
+    var idx = -1;
+    var upName = (up.name || '').toLowerCase().replace(/\s/g,'');
+    for (var i = 0; i < classData.students.length; i++) {
+      var st = classData.students[i];
+      var eName = (st.eName || '').toLowerCase().replace(/\s/g,'');
+      var cName = (st.cName || '').toLowerCase().replace(/\s/g,'');
+      var firstName = eName.split(' ')[0];
+      if (upName && (eName === upName || cName === upName ||
+          (firstName.length >= 2 && upName.indexOf(firstName) !== -1))) {
+        idx = i; break;
+      }
+    }
+
+    if (idx !== -1) {
+      var sym   = SYMS.indexOf(up.status) !== -1 ? up.status : null;
+      var score = up.score ? String(up.score) : null;
+      writeOne(idx, sym, score);
+      lastMatchIdx = idx;
+      matched++;
+      // 自動捲動到該學生列
+      setTimeout(function(){ 
+        var row = document.getElementById('arow-' + idx);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+
+      var st = classData.students[idx];
+      resultHtml += '<div class="gemini-item">';
+      resultHtml += '<span class="gemini-name">' + getDisplayName(st) + '</span>';
+      if (sym) resultHtml += '<span class="gemini-sym" style="color:'+SYM_COLOR[sym]+'">' + sym + '</span>';
+      if (score) resultHtml += '<span class="gemini-score">' + score + '分</span>';
+      if (up.comment) resultHtml += '<span class="gemini-comment">' + up.comment + '</span>';
+      resultHtml += '</div>';
+    } else {
+      skipped++;
+    }
+  });
+
+  if (resultHtml) {
+    document.getElementById('gemini-items').innerHTML = resultHtml;
+    document.getElementById('gemini-result').style.display = 'block';
+  }
+
+  var msg = '✅ Gemini 完成：更新 ' + matched + ' 人';
+  if (skipped) msg += '，' + skipped + ' 人未比對到';
+  setStatus(msg, 'ok');
+  addLog(msg, true);
+  renderAttTable();
+  renderAttSummaryBar();
+}
+
 // ══ 總表頁 ═══════════════════════════════════════
 function onSumClassChange() {
   var className=document.getElementById('sum-class-sel').value;
@@ -591,7 +820,6 @@ function renderSummaryTable() {
 
   for(var i=0;i<filtered.length;i++){
     var st=filtered[i];
-    // 找回在原始 students 陣列中的 index
     var origIdx=-1;
     for(var oi=0;oi<students.length;oi++){if(students[oi]===st){origIdx=oi;break;}}
 
@@ -607,10 +835,7 @@ function renderSummaryTable() {
       var needMakeup=rec.att==='○'||rec.att==='△';
       var needHw=rec.att!=='○'&&rec.att!=='△'&&rec.att!=='●'&&rec.att!=='▲'&&rec.score===''&&(rec.att==='V'||rec.att==='⊝'||rec.att==='');
       var cellBg=needMakeup?'missing-makeup':(needHw?'missing-hw':'');
-
-      // 出席格子：點擊彈出符號選單
       var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">·</span>';
-      // 分數格子：點擊彈出轉盤
       var hasScore=rec.score!=='';
       var scoreDisplay=hasScore?rec.score:'<span style="color:#ccc">-</span>';
 
@@ -641,9 +866,7 @@ function openAttPopup(event, studentIdx, lessonIdx) {
   var st  = summaryData.students[studentIdx];
   var rec = st.lessonRecords[lessonIdx];
   var cellEl = event.currentTarget;
-
-  attPopupContext = { studentIdx: studentIdx, lessonIdx: lessonIdx, cellEl: cellEl };
-
+  attPopupContext = { studentIdx:studentIdx, lessonIdx:lessonIdx, cellEl:cellEl };
   var popup = document.getElementById('att-popup');
   var html = '';
   SYMS.forEach(function(sym) {
@@ -656,8 +879,6 @@ function openAttPopup(event, studentIdx, lessonIdx) {
   html += '<div class="att-popup-divider"></div>';
   html += '<div class="att-popup-item" onclick="selectAttSym(\'\')" style="color:#999">✕ 清除</div>';
   popup.innerHTML = html;
-
-  // 定位
   var rect = cellEl.getBoundingClientRect();
   popup.style.display = 'flex';
   var top  = rect.bottom + window.scrollY + 4;
@@ -673,8 +894,6 @@ function selectAttSym(sym) {
   var st  = summaryData.students[ctx.studentIdx];
   var rec = st.lessonRecords[ctx.lessonIdx];
   rec.att = sym;
-
-  // 寫回 Sheet
   jsonpCall({
     action:'writeCell', className:summaryData.className,
     row:rec.attRow, col:rec.attCol, value:sym
@@ -724,8 +943,7 @@ function wheelTap(val){
 
 function openWheel(studentIdx, mode, lessonIdx) {
   wheelContext = { mode:mode, studentIdx:studentIdx, lessonIdx:lessonIdx };
-  var initVal = 80;
-  var name = '';
+  var initVal = 80, name = '';
   if (mode === 'attend') {
     var st = classData.students[studentIdx];
     name = (st.eName||'')+(st.eName&&st.cName?'　':'')+(st.cName||'');
@@ -796,97 +1014,7 @@ function clearScore() {
   closeWheel();
 }
 
-// ── 語音辨識 ─────────────────────────────────────
-function toggleMic(){
-  if(isListening){stopMic();return;}
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){setStatus('❌ 請改用 Chrome','err');return;}
-  if(!classData){setStatus('❌ 請先選班級與堂次','err');return;}
-  recognition=new SR();
-  recognition.lang='zh-TW'; recognition.continuous=true; recognition.interimResults=false;
-  recognition.onstart=function(){
-    isListening=true;
-    document.getElementById('mic-btn').className='mic-btn listening';
-    document.getElementById('mic-btn').textContent='🔴 聆聽中... (再按停止)';
-    setStatus('聆聽中 ── 可說「全班到」「Amy 缺席」「Brian 90分」','info');
-  };
-  recognition.onresult=function(e){
-    var text=e.results[e.results.length-1][0].transcript.trim();
-    addLog('🎙 '+text,true); processVoice(text);
-  };
-  recognition.onerror=function(e){setStatus('錯誤：'+e.error,'err');stopMic();};
-  recognition.onend=function(){if(isListening)recognition.start();};
-  recognition.start();
-}
-function stopMic(){
-  isListening=false; if(recognition)recognition.stop();
-  document.getElementById('mic-btn').className='mic-btn';
-  document.getElementById('mic-btn').textContent='🎤 開始語音點名';
-  setStatus('已停止聆聽','');
-}
-function processVoice(text){
-  if(!classData) return;
-  var lower=text.toLowerCase().replace(/\s/g,'');
-  var isAllCmd=false;
-  for(var a=0;a<ALL_KEYWORDS.length;a++) if(lower.indexOf(ALL_KEYWORDS[a])!==-1){isAllCmd=true;break;}
-  if(isAllCmd){
-    var allSym=detectSym(lower);
-    if(!allSym){setStatus('❓ 全班指令：聽不出狀態','err');return;}
-    var hasExcept=false;
-    for(var ex=0;ex<EXCEPT_KEYWORDS.length;ex++) if(lower.indexOf(EXCEPT_KEYWORDS[ex])!==-1){hasExcept=true;break;}
-    var exceptList=[];
-    if(hasExcept){
-      for(var i=0;i<classData.students.length;i++){
-        if(studentMatchesText(i,lower)){
-          var afterText='';
-          for(var ex2=0;ex2<EXCEPT_KEYWORDS.length;ex2++){var pos=text.indexOf(EXCEPT_KEYWORDS[ex2]);if(pos!==-1){afterText=text.substring(pos).toLowerCase().replace(/\s/g,'');break;}}
-          var exSym=detectSym(afterText)||(allSym==='V'?'○':'V');
-          exceptList.push({idx:i,sym:exSym});
-        }
-      }
-    }
-    var exceptIdxArr=exceptList.map(function(e){return e.idx;});
-    var count=writeAll(allSym,exceptIdxArr);
-    for(var e=0;e<exceptList.length;e++) writeOne(exceptList[e].idx,exceptList[e].sym,null);
-    var msg='✅ 全班 '+count+' 人 → '+SYM_SHORT[allSym];
-    if(exceptList.length) msg+='　例外：'+exceptList.map(function(e){return getDisplayName(classData.students[e.idx])+'('+SYM_SHORT[e.sym]+')';}).join('、');
-    setStatus(msg,'ok'); addLog(msg,true); return;
-  }
-  var matchIdx=findStudent(lower);
-  var scoreMatch=text.match(/(\d+)\s*分/);
-  if(scoreMatch&&matchIdx!==-1){
-    lastMatchIdx=matchIdx; var st=classData.students[matchIdx];
-    writeOne(matchIdx,null,scoreMatch[1]);
-    setStatus('✅ '+getDisplayName(st)+' 分數 → '+scoreMatch[1]+' 分','ok');
-    addLog(getDisplayName(st)+' 分數 '+scoreMatch[1],true); return;
-  }
-  if(matchIdx!==-1){
-    lastMatchIdx=matchIdx; var st=classData.students[matchIdx];
-    var sym=detectSym(lower);
-    if(!sym){setStatus('❓ 聽到「'+getDisplayName(st)+'」但聽不出指令','err');renderAttRow(matchIdx);return;}
-    writeOne(matchIdx,sym,null);
-    setStatus('✅ '+getDisplayName(st)+' → '+sym+'（'+SYM_SHORT[sym]+'）','ok');
-    addLog(getDisplayName(st)+' → '+sym,true); return;
-  }
-  setStatus('❓ 找不到學生名字，再說一次？','err');
-}
-function findStudent(lower){
-  var s=classData.students;
-  for(var i=0;i<s.length;i++){var e=s[i].eName.toLowerCase().replace(/\s/g,'');if(e&&lower.indexOf(e)!==-1)return i;}
-  for(var i=0;i<s.length;i++){if(s[i].cName&&lower.indexOf(s[i].cName)!==-1)return i;}
-  for(var i=0;i<s.length;i++){var f=s[i].eName.split(' ')[0].toLowerCase();if(f.length>=2&&lower.indexOf(f)!==-1)return i;}
-  return -1;
-}
-function studentMatchesText(idx,lower){
-  var st=classData.students[idx];
-  var e=st.eName.toLowerCase().replace(/\s/g,'');
-  var f=st.eName.split(' ')[0].toLowerCase();
-  return (e&&lower.indexOf(e)!==-1)||(st.cName&&lower.indexOf(st.cName)!==-1)||(f.length>=2&&lower.indexOf(f)!==-1);
-}
-function detectSym(lower){
-  for(var c=0;c<CMD_MAP.length;c++) for(var k=0;k<CMD_MAP[c].keywords.length;k++) if(lower.indexOf(CMD_MAP[c].keywords[k])!==-1) return CMD_MAP[c].sym;
-  return null;
-}
+// ── 工具函數 ──────────────────────────────────────
 function getTodayMMDD(){var now=new Date();return('0'+(now.getMonth()+1)).slice(-2)+'/'+('0'+now.getDate()).slice(-2);}
 function setStatus(msg,type){var el=document.getElementById('status-bar');el.textContent=msg;el.className='status-bar'+(type?' '+type:'');}
 function addLog(msg,ok){var log=document.getElementById('log');var t=new Date().toLocaleTimeString('zh-TW');log.innerHTML='<div class="log-item">['+t+'] '+(ok!==false?'✅':'❌')+' '+msg+'</div>'+log.innerHTML;}
