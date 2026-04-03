@@ -190,28 +190,32 @@ function loadClassList() {
 // --- 語音 & Gemini (修正 URL 過長問題) ---
 function toggleMic() {
   if (isListening) { stopMic(); return; }
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    // 關鍵修正：降低 bitsPerSecond 確保 Base64 縮短到網址塞得下
-    mediaRecorder = new MediaRecorder(stream, { audioBitsPerSecond: 16000 });
+
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/mp4';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
     audioChunks = [];
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const reader = new FileReader();
-      reader.readAsDataURL(new Blob(audioChunks));
-      reader.onloadend = () => {
-        const base64Data = reader.result.split(',')[1];
-        if (base64Data.length > 7000) {
-          setStatus('⚠️ 錄音太長，請縮短至 2 秒內', 'err');
-          return;
-        }
-        sendToGemini(base64Data);
+    mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
+    mediaRecorder.onstop = function() {
+      var blob = new Blob(audioChunks, { type: mimeType });
+      var reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = function() {
+        var base64 = reader.result.split(',')[1];
+        sendToGemini(base64, mimeType);
       };
     };
+
     mediaRecorder.start();
     isListening = true;
     document.getElementById('mic-btn').className = 'mic-btn listening';
     document.getElementById('mic-btn').textContent = '🔴 錄音中 (按我停止)';
-    setStatus('錄製中，說完請快按停止...', 'info');
+    setStatus('錄製中，說完請按停止...', 'info');
+
+  }).catch(function(err) {
+    setStatus('❌ 麥克風錯誤：' + err.message, 'err');
   });
 }
 
@@ -220,7 +224,34 @@ function stopMic() {
   isListening = false;
   document.getElementById('mic-btn').className = 'mic-btn';
   document.getElementById('mic-btn').textContent = '🎤 開始語音點名';
-  setStatus('🤖 Gemini 辨識中...', 'info');
+  setStatus('🤖 傳送中...', 'info');
+}
+
+async function sendToGemini(base64, mimeType) {
+  var cls = document.getElementById('class-sel').value;
+  var col = document.getElementById('date-sel').value;
+
+  try {
+    var res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },  // 不能用 application/json，會觸發 preflight
+      body: JSON.stringify({
+        action: 'processVoice',
+        className: cls,
+        attCol: col,
+        audioData: base64,
+        mimeType: mimeType
+      })
+    });
+    var data = await res.json();
+    if (data.error) { setStatus('❌ ' + data.error, 'err'); return; }
+    var comment = (data.data && data.data[0]) ? data.data[0].comment : "";
+    if (comment) alert("🤖 " + comment);
+    setStatus(data.msg, 'ok');
+    onDateChange();
+  } catch(e) {
+    setStatus('❌ ' + e.message, 'err');
+  }
 }
 
 function sendToGemini(base64) {
