@@ -187,23 +187,31 @@ function loadClassList() {
   });
 }
 
-// --- 語音 & Gemini ---
+// --- 語音 & Gemini (修正 URL 過長問題) ---
 function toggleMic() {
   if (isListening) { stopMic(); return; }
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    mediaRecorder = new MediaRecorder(stream);
+    // 關鍵修正：降低 bitsPerSecond 確保 Base64 縮短到網址塞得下
+    mediaRecorder = new MediaRecorder(stream, { audioBitsPerSecond: 16000 });
     audioChunks = [];
     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
     mediaRecorder.onstop = () => {
       const reader = new FileReader();
       reader.readAsDataURL(new Blob(audioChunks));
-      reader.onloadend = () => sendToGemini(reader.result.split(',')[1]);
+      reader.onloadend = () => {
+        const base64Data = reader.result.split(',')[1];
+        if (base64Data.length > 7000) {
+          setStatus('⚠️ 錄音太長，請縮短至 2 秒內', 'err');
+          return;
+        }
+        sendToGemini(base64Data);
+      };
     };
     mediaRecorder.start();
     isListening = true;
     document.getElementById('mic-btn').className = 'mic-btn listening';
     document.getElementById('mic-btn').textContent = '🔴 錄音中 (按我停止)';
-    setStatus('錄製中...', 'info');
+    setStatus('錄製中，說完請快按停止...', 'info');
   });
 }
 
@@ -219,8 +227,9 @@ function sendToGemini(base64) {
   var cls = document.getElementById('class-sel').value;
   var col = document.getElementById('date-sel').value;
   jsonpCall({ action:'processVoice', className:cls, attCol:col, audioData:base64 }, function(err, res) {
-    if (err || (res && res.error)) { setStatus('辨識失敗', 'err'); return; }
-    alert("🤖 Gemini 評論：\n" + (res.data[0].comment || "完成"));
+    if (err || (res && res.error)) { setStatus('❌ 辨識失敗：資料過長或網路錯誤', 'err'); return; }
+    var joke = (res.data && res.data[0]) ? res.data[0].comment : "完成！";
+    alert("🤖 Gemini 評論：\n" + joke);
     setStatus(res.msg, 'ok');
     onDateChange();
   });
@@ -252,7 +261,8 @@ function renderTable() {
   SYMS.forEach(function(s) { html += '<th>'+s+'</th>'; });
   html += '<th>分數</th></tr></thead><tbody>';
   classData.students.forEach(function(st, i) {
-    html += '<tr><td>'+(st.eName||st.cName)+'</td>';
+    var displayName = st.displayName || st.eName || st.cName;
+    html += '<tr><td>'+displayName+'</td>';
     SYMS.forEach(function(s) {
       var sel = st.status === s ? ' '+SYMCLASS[s] : '';
       html += '<td><button class="sym-btn'+sel+'" onclick="updateSt('+i+',\''+s+'\')">'+s+'</button></td>';
@@ -268,14 +278,13 @@ function updateSt(i, s) {
     onDateChange();
   });
 }
-// --- 補回總表功能 ---
+
+// --- 總表補回功能 (修正無畫面問題) ---
 function onSumClassChange() {
   var cls = document.getElementById('sum-class-sel').value;
   var wrap = document.getElementById('summary-wrap');
   if (!cls) { wrap.innerHTML = '<div class="empty">請選擇班級</div>'; return; }
-  
   wrap.innerHTML = '<div class="loading">正在讀取全班總表...</div>';
-  
   jsonpCall({ action: 'getClassSummary', className: cls }, function(err, data) {
     if (err || !data || data.error) { 
       wrap.innerHTML = '<div class="empty">讀取失敗：' + (data ? data.error : '網路錯誤') + '</div>'; 
@@ -288,39 +297,36 @@ function onSumClassChange() {
 
 function renderSummaryTable() {
   if (!summaryData) return;
-  var lessons = summaryData.lessons;
-  var students = summaryData.students;
+  var lessons = summaryData.lessons || [];
+  var students = summaryData.students || [];
+  var wrap = document.getElementById('summary-wrap');
   
   var html = '<div class="summary-table-wrap"><table class="summary-table"><thead><tr>';
-  html += '<th style="position:sticky; left:0; background:#274e13; z-index:3; min-width:80px;">學生</th>';
+  html += '<th style="position:sticky; left:0; background:#274e13; z-index:3; min-width:80px; color:white;">學生</th>';
   
-  // 生成每一堂課的標題
   lessons.forEach(function(l) {
-    html += '<th>' + l.unit + '<br><span style="font-weight:400; font-size:10px;">' + l.lesson + '</span></th>';
+    html += '<th>' + (l.unit || '') + '<br><span style="font-weight:400; font-size:10px;">' + (l.lesson || '') + '</span></th>';
   });
   html += '</tr></thead><tbody>';
 
-  // 填入每個學生的資料
   students.forEach(function(st) {
     html += '<tr>';
-    html += '<td style="position:sticky; left:0; background:white; z-index:1; font-weight:600; border-right:1px solid #eee;">' + (st.eName || st.cName) + '</td>';
+    html += '<td style="position:sticky; left:0; background:white; z-index:1; font-weight:600; border-right:1px solid #eee;">' + (st.displayName || st.eName || st.cName) + '</td>';
     
-    st.lessonRecords.forEach(function(rec) {
-      var att = rec.att || '·';
-      var score = rec.score || '-';
-      // 根據符號給顏色
-      var color = SYM_COLOR[att] || '#999';
-      html += '<td>';
-      html += '<span style="font-weight:700; color:' + color + ';">' + att + '</span>';
-      html += '<br><span style="font-size:10px; color:#aaa;">' + score + '</span>';
-      html += '</td>';
-    });
+    if (st.lessonRecords) {
+      st.lessonRecords.forEach(function(rec) {
+        var att = rec.att || '·';
+        var score = rec.score || '-';
+        var color = SYM_COLOR[att] || '#999';
+        html += '<td><span style="font-weight:700; color:' + color + ';">' + att + '</span><br><span style="font-size:10px; color:#aaa;">' + score + '</span></td>';
+      });
+    }
     html += '</tr>';
   });
-
   html += '</tbody></table></div>';
-  document.getElementById('summary-wrap').innerHTML = html;
+  wrap.innerHTML = html;
 }
+
 // --- 工具 ---
 function jsonpCall(p, cb) {
   var name = '__nc' + cbCounter++;
@@ -331,15 +337,17 @@ function jsonpCall(p, cb) {
   sc.src = url;
   document.body.appendChild(sc);
 }
+
 function switchTab(t, b) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.getElementById('page-'+t).classList.add('active'); b.classList.add('active');
 }
+
 function setStatus(m, t) { var e = document.getElementById('status-bar'); e.textContent = m; e.className = 'status-bar ' + t; }
 function showToast(m) { var t = document.createElement('div'); t.className = 'save-toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
-function buildWheel() { /* 保持原轉盤邏輯... */ }
-function openWheel() { /* 保持原轉盤邏輯... */ }
+function buildWheel() { /* 轉盤邏輯可保持現狀 */ }
+function openWheel() { /* 轉盤邏輯可保持現狀 */ }
 function closeWheel() { document.getElementById('wheel-overlay').style.display='none'; }
 function wheelOverlayClick(e) { if(e.target.id==='wheel-overlay') closeWheel(); }
 </script>
