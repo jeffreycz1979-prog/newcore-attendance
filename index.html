@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NewCore 語音點名</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; font-size: 14px; }
+
+  .top { background: #274e13; color: white; padding: 14px 18px; }
+  .top h2 { font-size: 16px; font-weight: 700; }
+  .top .sub { font-size: 12px; opacity: 0.75; margin-top: 3px; min-height: 16px; }
+
+  .body { padding: 14px; max-width: 700px; margin: 0 auto; }
+
+  .card { background: white; border-radius: 12px; padding: 14px 16px;
+          margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase;
+          letter-spacing: .04em; display: block; margin-bottom: 5px; }
+
+  select { width: 100%; padding: 9px 10px; font-size: 13px; border-radius: 8px;
+           border: 1px solid #ddd; background: #fafafa; color: #222; }
+  select:focus { outline: none; border-color: #274e13; }
+
+  .lesson-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .info-box { background: #f8f9fa; border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .info-box .val { font-size: 15px; font-weight: 700; color: #274e13; }
+  .info-box .lbl { font-size: 10px; color: #999; margin-top: 2px; }
+
+  .mic-btn { width: 100%; padding: 13px; font-size: 15px; font-weight: 700;
+             border-radius: 10px; border: none; background: #274e13; color: white;
+             cursor: pointer; margin-bottom: 10px; transition: background .2s; }
+  .mic-btn.listening { background: #c0392b; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+
+  .status-bar { text-align: center; padding: 9px 12px; border-radius: 8px; font-size: 12px;
+                background: #eee; color: #666; min-height: 36px;
+                display: flex; align-items: center; justify-content: center; }
+  .status-bar.ok   { background: #e6f4ea; color: #1e7e34; }
+  .status-bar.err  { background: #fce8e6; color: #c0392b; }
+  .status-bar.info { background: #e8f0fe; color: #1a5276; }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 20px;
+         font-size: 11px; font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f1f3f4; font-size: 11px; font-weight: 700; padding: 8px 4px;
+       text-align: center; color: #666; }
+  th:first-child { text-align: left; padding-left: 10px; }
+  td { padding: 7px 4px; font-size: 13px; text-align: center; border-bottom: 1px solid #f5f5f5; }
+  td:first-child { text-align: left; padding-left: 10px; font-weight: 500; min-width: 80px; }
+  tr:last-child td { border-bottom: none; }
+  tr.highlight td { background: #fffde7; }
+
+  .sym-btn { width: 28px; height: 26px; border-radius: 5px; border: 1px solid #e0e0e0;
+             background: white; font-size: 13px; cursor: pointer; }
+  .sym-btn.sel-V  { background: #e6f4ea; border-color: #1e7e34; font-weight: 700; }
+  .sym-btn.sel-x1 { background: #fce8e6; border-color: #c0392b; font-weight: 700; }
+  .sym-btn.sel-x2 { background: #f5cba7; border-color: #ca6f1e; font-weight: 700; }
+  .sym-btn.sel-x3 { background: #fef9e7; border-color: #d4ac0d; font-weight: 700; }
+  .sym-btn.sel-x4 { background: #fad7a0; border-color: #ca8a04; font-weight: 700; }
+  .sym-btn.sel-x5 { background: #e8f0fe; border-color: #1a5276; font-weight: 700; }
+
+  .score-input { width: 46px; padding: 3px 4px; font-size: 12px;
+                 border-radius: 5px; border: 1px solid #ddd; text-align: center; }
+
+  .log-item { font-size: 11px; color: #888; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
+  .empty   { text-align: center; color: #bbb; padding: 24px 0; font-size: 13px; }
+  .loading { text-align: center; color: #aaa; padding: 20px; }
+
+  /* API 網址設定區 */
+  .api-bar { background: #fff8e1; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+             display: flex; gap: 8px; align-items: center; }
+  .api-bar input { flex: 1; padding: 7px 10px; font-size: 12px; border-radius: 6px;
+                   border: 1px solid #ddd; font-family: monospace; }
+  .api-bar button { padding: 7px 14px; font-size: 12px; border-radius: 6px; border: none;
+                    background: #274e13; color: white; cursor: pointer; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h2>🎤 NewCore 語音點名</h2>
+  <div class="sub" id="top-sub">請先設定 API 網址</div>
+</div>
+
+<div class="body">
+
+  <!-- API 網址設定 -->
+  <div class="api-bar">
+    <input type="text" id="api-url" placeholder="貼上你的 Apps Script 部署網址 (/exec 結尾)" />
+    <button onclick="saveApi()">連線</button>
+  </div>
+
+  <!-- 選班級 + 選堂次 -->
+  <div class="card">
+    <div class="row2">
+      <div>
+        <label>班級</label>
+        <select id="class-sel"><option value="">請先連線...</option></select>
+      </div>
+      <div>
+        <label>堂次 / 日期</label>
+        <select id="date-sel" disabled><option value="">請先選班級</option></select>
+      </div>
+    </div>
+    <div id="lesson-info" style="display:none;">
+      <div class="lesson-info">
+        <div class="info-box"><div class="val" id="info-unit">--</div><div class="lbl">單元</div></div>
+        <div class="info-box"><div class="val" id="info-lesson">--</div><div class="lbl">堂數</div></div>
+        <div class="info-box"><div class="val" id="info-teacher">--</div><div class="lbl">授課老師</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 語音區 -->
+  <div id="main-area" style="display:none;">
+    <div class="card">
+      <button class="mic-btn" id="mic-btn">🎤 開始語音點名</button>
+      <div class="status-bar" id="status-bar">選擇堂次後可開始點名</div>
+      <div class="summary" id="summary"></div>
+    </div>
+
+    <div class="card" style="padding: 10px 0; overflow-x: auto;">
+      <div id="student-table-wrap"><div class="loading">載入中...</div></div>
+    </div>
+
+    <div class="card">
+      <label>辨識紀錄</label>
+      <div id="log"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── 設定 ─────────────────────────────────────────
+var API_URL = localStorage.getItem('nc_api_url') || '';
+var classData    = null;
+var availDates   = [];
+var recognition  = null;
+var isListening  = false;
+var lastMatchIdx = -1;
+
+var SYMS      = ['V','○','●','△','▲','⊝'];
+var SYMCLASS  = {'V':'sel-V','○':'sel-x1','●':'sel-x2','△':'sel-x3','▲':'sel-x4','⊝':'sel-x5'};
+var SYM_LABEL = {'V':'到','○':'缺席','●':'補缺','△':'請假','▲':'補假','⊝':'遲到'};
+var SYM_BG    = {'V':'#e6f4ea','○':'#fce8e6','●':'#f5cba7','△':'#fef9e7','▲':'#fad7a0','⊝':'#e8f0fe'};
+var SYM_COLOR = {'V':'#1e7e34','○':'#c0392b','●':'#ca6f1e','△':'#d4ac0d','▲':'#ca8a04','⊝':'#1a5276'};
+var CMD_MAP = [
+  { keywords: ['到了','出席','有來','present'], sym: 'V'  },
+  { keywords: ['補課缺席','補缺'],              sym: '●'  },
+  { keywords: ['缺席','沒來','沒到','absent'],  sym: '○'  },
+  { keywords: ['補課請假','補假'],              sym: '▲'  },
+  { keywords: ['請假','leave'],                 sym: '△'  },
+  { keywords: ['遲到','late'],                  sym: '⊝'  }
+];
+
+// ── 初始化 ────────────────────────────────────────
+window.addEventListener('load', function() {
+  if (API_URL) document.getElementById('api-url').value = API_URL;
+  document.getElementById('class-sel').addEventListener('change', onClassChange);
+  document.getElementById('date-sel').addEventListener('change', onDateChange);
+  document.getElementById('mic-btn').addEventListener('click', toggleMic);
+  if (API_URL) loadClassList();
+});
+
+// ── API 連線 ──────────────────────────────────────
+function saveApi() {
+  var url = document.getElementById('api-url').value.trim();
+  if (!url) return;
+  API_URL = url;
+  localStorage.setItem('nc_api_url', url);
+  loadClassList();
+}
+
+function apiFetch(params) {
+  var url = API_URL + '?' + Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
+  return fetch(url).then(function(r) { return r.json(); });
+}
+
+function apiPost(body) {
+  return fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }).then(function(r) { return r.json(); });
+}
+
+// ── 載入班級清單 ──────────────────────────────────
+function loadClassList() {
+  document.getElementById('top-sub').textContent = '連線中...';
+  var sel = document.getElementById('class-sel');
+  sel.innerHTML = '<option value="">載入中...</option>';
+
+  apiFetch({ action: 'getClassList' })
+    .then(function(list) {
+      if (!list || list.error) {
+        sel.innerHTML = '<option value="">❌ ' + (list && list.error || '連線失敗') + '</option>';
+        return;
+      }
+      sel.innerHTML = '<option value="">請選擇班級...</option>';
+      for (var i = 0; i < list.length; i++) {
+        sel.innerHTML += '<option value="' + list[i] + '">' + list[i] + '</option>';
+      }
+      document.getElementById('top-sub').textContent = '已連線，請選擇班級';
+    })
+    .catch(function(e) {
+      sel.innerHTML = '<option value="">❌ 連線失敗</option>';
+      document.getElementById('top-sub').textContent = '連線失敗：' + e.message;
+    });
+}
+
+// ── 選班級 ────────────────────────────────────────
+function onClassChange() {
+  var className = document.getElementById('class-sel').value;
+  var dateSel = document.getElementById('date-sel');
+  classData = null; availDates = [];
+  dateSel.innerHTML = '<option value="">載入中...</option>';
+  dateSel.disabled = true;
+  document.getElementById('main-area').style.display = 'none';
+  document.getElementById('lesson-info').style.display = 'none';
+  if (!className) { dateSel.innerHTML = '<option value="">請先選班級</option>'; return; }
+
+  apiFetch({ action: 'getAvailableDates', className: className })
+    .then(function(dates) {
+      availDates = dates;
+      if (!dates || dates.length === 0) {
+        dateSel.innerHTML = '<option value="">（無可用堂次）</option>'; return;
+      }
+      var todayMMDD = getTodayMMDD();
+      var defaultIdx = 0;
+      for (var i = 0; i < dates.length; i++) {
+        if (dates[i].dateText.indexOf(todayMMDD) !== -1) { defaultIdx = i; break; }
+        if (dates[i].dateText < todayMMDD) defaultIdx = i;
+      }
+      dateSel.innerHTML = '<option value="">請選擇堂次...</option>';
+      for (var i = 0; i < dates.length; i++) {
+        var d = dates[i];
+        var label = d.dateText + '　' + d.unit + ' ' + d.lesson.replace(' 點名','') + '　' + (d.teacher || '');
+        dateSel.innerHTML += '<option value="' + d.colIdx + '">' + label + '</option>';
+      }
+      dateSel.disabled = false;
+      dateSel.selectedIndex = defaultIdx + 1;
+      onDateChange();
+    })
+    .catch(function(e) { dateSel.innerHTML = '<option value="">❌ ' + e.message + '</option>'; });
+}
+
+// ── 選堂次 ────────────────────────────────────────
+function onDateChange() {
+  var className = document.getElementById('class-sel').value;
+  var colIdx = parseInt(document.getElementById('date-sel').value);
+  if (!className || isNaN(colIdx)) return;
+
+  document.getElementById('student-table-wrap').innerHTML = '<div class="loading">讀取中...</div>';
+  document.getElementById('main-area').style.display = 'block';
+
+  apiFetch({ action: 'getClassDataByCol', className: className, attCol: colIdx })
+    .then(function(data) {
+      if (data.error) { setStatus(data.error, 'err'); return; }
+      classData = data;
+      document.getElementById('top-sub').textContent =
+        data.className + '  ·  ' + data.dateText + '  ·  ' + data.unitText + '  ' + data.lessonText;
+      document.getElementById('info-unit').textContent    = data.unitText    || '--';
+      document.getElementById('info-lesson').textContent  = data.lessonText.replace(' 點名','') || '--';
+      document.getElementById('info-teacher').textContent = data.teacherText || '--';
+      document.getElementById('lesson-info').style.display = 'block';
+      setStatus('已載入 ' + data.dateText + ' · 共 ' + data.students.length + ' 位學生', 'ok');
+      renderTable();
+      renderSummary();
+    })
+    .catch(function(e) { setStatus('讀取失敗：' + e.message, 'err'); });
+}
+
+// ── 工具 ─────────────────────────────────────────
+function getTodayMMDD() {
+  var now = new Date();
+  return ('0'+(now.getMonth()+1)).slice(-2) + '/' + ('0'+now.getDate()).slice(-2);
+}
+
+// ── 渲染 ─────────────────────────────────────────
+function renderTable() {
+  if (!classData) return;
+  var wrap = document.getElementById('student-table-wrap');
+  if (!classData.students.length) { wrap.innerHTML = '<div class="empty">無學生資料</div>'; return; }
+
+  var html = '<table><thead><tr><th>學生</th>';
+  for (var s = 0; s < SYMS.length; s++) html += '<th>' + SYMS[s] + '</th>';
+  html += '<th>分數</th></tr></thead><tbody>';
+  for (var i = 0; i < classData.students.length; i++) {
+    var st = classData.students[i];
+    html += '<tr id="row-' + i + '"' + (i === lastMatchIdx ? ' class="highlight"' : '') + '>';
+    html += '<td title="' + st.cName + '">' + st.displayName + '</td>';
+    for (var j = 0; j < SYMS.length; j++) {
+      var sym = SYMS[j];
+      html += '<td><button class="sym-btn' + (st.status === sym ? ' '+SYMCLASS[sym] : '') +
+              '" onclick="clickStatus('+i+',\''+sym+'\')">'+sym+'</button></td>';
+    }
+    html += '<td><input class="score-input" type="number" min="0" max="100" value="' +
+            st.score + '" onchange="clickScore('+i+',this.value)" placeholder="-"/></td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function renderSummary() {
+  if (!classData) return;
+  var counts = {}; SYMS.forEach(function(s){ counts[s]=0; });
+  var none = 0;
+  classData.students.forEach(function(st){ if(st.status) counts[st.status]++; else none++; });
+  var html = '';
+  SYMS.forEach(function(sym){
+    if(counts[sym]) html += '<span class="tag" style="background:'+SYM_BG[sym]+';color:'+SYM_COLOR[sym]+'">'+SYM_LABEL[sym]+' '+counts[sym]+'</span>';
+  });
+  if(none) html += '<span class="tag" style="background:#eee;color:#999">未點 '+none+'</span>';
+  document.getElementById('summary').innerHTML = html;
+}
+
+function renderRow(idx) {
+  var st = classData.students[idx];
+  var row = document.getElementById('row-'+idx);
+  if (!row) return;
+  row.className = (idx === lastMatchIdx) ? 'highlight' : '';
+  var btns = row.querySelectorAll('.sym-btn');
+  for (var j = 0; j < SYMS.length; j++)
+    btns[j].className = 'sym-btn' + (st.status === SYMS[j] ? ' '+SYMCLASS[SYMS[j]] : '');
+}
+
+// ── 手動點擊 ──────────────────────────────────────
+function clickStatus(idx, sym) {
+  var st = classData.students[idx];
+  var newSym = st.status === sym ? '' : sym;
+  st.status = newSym;
+  renderRow(idx);
+  renderSummary();
+  apiPost({ className: classData.className, studentRow: st.row,
+            attCol: classData.attCol, scoreCol: classData.scoreCol,
+            status: newSym, score: null })
+    .then(function(r){ addLog(st.displayName + ' → ' + (newSym||'清除'), r.ok); })
+    .catch(function(e){ addLog('寫入失敗：'+e.message, false); });
+}
+
+function clickScore(idx, val) {
+  var st = classData.students[idx];
+  st.score = val;
+  apiPost({ className: classData.className, studentRow: st.row,
+            attCol: classData.attCol, scoreCol: classData.scoreCol,
+            status: null, score: val })
+    .then(function(r){ addLog(st.displayName + ' 分數 → ' + val, r.ok); })
+    .catch(function(e){ addLog('寫入失敗：'+e.message, false); });
+}
+
+// ── 語音辨識 ──────────────────────────────────────
+function toggleMic() {
+  if (isListening) { stopMic(); return; }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setStatus('❌ 請改用 Chrome 瀏覽器', 'err'); return; }
+  if (!classData) { setStatus('❌ 請先選擇班級與堂次', 'err'); return; }
+
+  recognition = new SR();
+  recognition.lang = 'zh-TW';
+  recognition.continuous = true;
+  recognition.interimResults = false;
+
+  recognition.onstart = function() {
+    isListening = true;
+    document.getElementById('mic-btn').className = 'mic-btn listening';
+    document.getElementById('mic-btn').textContent = '🔴 聆聽中... (再按停止)';
+    setStatus('聆聽中 ── 說「Amy 到了」「Amy 請假」「Amy 90分」', 'info');
+  };
+  recognition.onresult = function(e) {
+    var text = e.results[e.results.length-1][0].transcript.trim();
+    addLog('🎙 ' + text, true);
+    processVoice(text);
+  };
+  recognition.onerror = function(e) {
+    setStatus('錯誤：' + e.error, 'err');
+    stopMic();
+  };
+  recognition.onend = function() { if (isListening) recognition.start(); };
+  recognition.start();
+}
+
+function stopMic() {
+  isListening = false;
+  if (recognition) recognition.stop();
+  document.getElementById('mic-btn').className = 'mic-btn';
+  document.getElementById('mic-btn').textContent = '🎤 開始語音點名';
+  setStatus('已停止聆聽', '');
+}
+
+function processVoice(text) {
+  if (!classData) return;
+  var lower = text.toLowerCase().replace(/\s/g,'');
+  var matchIdx = -1;
+
+  for (var i = 0; i < classData.students.length; i++) {
+    var eName = classData.students[i].eName.toLowerCase().replace(/\s/g,'');
+    var cName = classData.students[i].cName;
+    if (eName && lower.indexOf(eName) !== -1) { matchIdx = i; break; }
+    if (cName && lower.indexOf(cName) !== -1) { matchIdx = i; break; }
+  }
+  if (matchIdx === -1) {
+    for (var i = 0; i < classData.students.length; i++) {
+      var fn = classData.students[i].eName.split(' ')[0].toLowerCase();
+      if (fn.length >= 2 && lower.indexOf(fn) !== -1) { matchIdx = i; break; }
+    }
+  }
+  if (matchIdx === -1) { setStatus('❓ 找不到學生名字，再說一次？', 'err'); return; }
+
+  lastMatchIdx = matchIdx;
+  var st = classData.students[matchIdx];
+
+  var scoreMatch = text.match(/(\d+)\s*分/);
+  if (scoreMatch) {
+    st.score = scoreMatch[1];
+    renderRow(matchIdx); renderSummary();
+    setStatus('✅ ' + st.displayName + ' 分數 → ' + scoreMatch[1] + ' 分', 'ok');
+    apiPost({ className: classData.className, studentRow: st.row,
+              attCol: classData.attCol, scoreCol: classData.scoreCol,
+              status: null, score: scoreMatch[1] })
+      .then(function(r){ addLog(st.displayName + ' 分數 ' + scoreMatch[1], r.ok); });
+    return;
+  }
+
+  var matched = null;
+  for (var c = 0; c < CMD_MAP.length; c++) {
+    for (var k = 0; k < CMD_MAP[c].keywords.length; k++) {
+      if (lower.indexOf(CMD_MAP[c].keywords[k]) !== -1) { matched = CMD_MAP[c].sym; break; }
+    }
+    if (matched) break;
+  }
+  if (!matched) { setStatus('❓ 聽到「'+st.displayName+'」但聽不出指令', 'err'); renderRow(matchIdx); return; }
+
+  st.status = matched;
+  renderRow(matchIdx); renderSummary();
+  setStatus('✅ ' + st.displayName + ' → ' + matched + '（' + SYM_LABEL[matched] + '）', 'ok');
+  addLog(st.displayName + ' → ' + matched, true);
+  apiPost({ className: classData.className, studentRow: st.row,
+            attCol: classData.attCol, scoreCol: classData.scoreCol,
+            status: matched, score: null })
+    .then(function(r){ if(!r.ok) addLog('寫入失敗：'+r.msg, false); });
+}
+
+// ── 工具函式 ──────────────────────────────────────
+function setStatus(msg, type) {
+  var el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.className = 'status-bar' + (type ? ' '+type : '');
+}
+function addLog(msg, ok) {
+  var log = document.getElementById('log');
+  var t = new Date().toLocaleTimeString('zh-TW');
+  log.innerHTML = '<div class="log-item">['+t+'] '+(ok!==false?'✅':'❌')+' '+msg+'</div>' + log.innerHTML;
+}
+</script>
+</body>
+</html>
