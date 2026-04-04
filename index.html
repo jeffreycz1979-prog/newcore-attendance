@@ -554,7 +554,7 @@ function loadGeminiKey() {
     if (err || !data || !data.key) { console.warn('Gemini Key 載入失敗'); return; }
     GEMINI_API_KEY = data.key;
     updateGeminiUrl();
-    console.log('✅ Gemini Key 已載入');
+    console.log('\u2705 Gemini Key 已載入');
   });
 }
 
@@ -575,14 +575,14 @@ var QUICK_SCORES    = [60,70,75,80,85,90,95,100];
 // 出席彈窗
 var attPopupContext = null;
 
-var SYMS      = ['V','○','●','△','▲','⊝'];
-var SYMCLASS  = {'V':'sel-V','○':'sel-x1','●':'sel-x2','△':'sel-x3','▲':'sel-x4','⊝':'sel-x5'};
-var SYM_SHORT = {'V':'到','○':'缺席','●':'補缺','△':'請假','▲':'補假','⊝':'遲到'};
-var SYM_BG    = {'V':'#e6f4ea','○':'#fce8e6','●':'#f5cba7','△':'#fef9e7','▲':'#fad7a0','⊝':'#e8f0fe'};
-var SYM_COLOR = {'V':'#1e7e34','○':'#c0392b','●':'#ca6f1e','△':'#d4ac0d','▲':'#ca8a04','⊝':'#1a5276'};
-var ATT_CLASS = {'V':'att-V','○':'att-o','●':'att-ob','△':'att-d','▲':'att-db','⊝':'att-l'};
+var SYMS      = ['V','\u25cb','\u25cf','\u25b3','\u25b2','\u229d'];
+var SYMCLASS  = {'V':'sel-V','\u25cb':'sel-x1','\u25cf':'sel-x2','\u25b3':'sel-x3','\u25b2':'sel-x4','\u229d':'sel-x5'};
+var SYM_SHORT = {'V':'到','\u25cb':'缺席','\u25cf':'補缺','\u25b3':'請假','\u25b2':'補假','\u229d':'遲到'};
+var SYM_BG    = {'V':'#e6f4ea','\u25cb':'#fce8e6','\u25cf':'#f5cba7','\u25b3':'#fef9e7','\u25b2':'#fad7a0','\u229d':'#e8f0fe'};
+var SYM_COLOR = {'V':'#1e7e34','\u25cb':'#c0392b','\u25cf':'#ca6f1e','\u25b3':'#d4ac0d','\u25b2':'#ca8a04','\u229d':'#1a5276'};
+var ATT_CLASS = {'V':'att-V','\u25cb':'att-o','\u25cf':'att-ob','\u25b3':'att-d','\u25b2':'att-db','\u229d':'att-l'};
 
-// ── JSONP（一般讀寫，不含大型音訊）──────────────────
+// \u2500\u2500 JSONP（一般讀寫，不含大型音訊）\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function jsonpCall(params, callback) {
   var cbName = '__ncCb' + (cbCounter++);
   var url = API_URL + '?callback=' + cbName;
@@ -604,14 +604,14 @@ function jsonpCall(params, callback) {
   document.body.appendChild(script);
 }
 
-// ── 瀏覽器直接呼叫 Gemini API（繞過 CORS）────────────
+// \u2500\u2500 瀏覽器直接呼叫 Gemini API（繞過 CORS）\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function callGemini(base64, mimeType, studentList, callback) {
-  var prompt = '你是點名助手。學生名單：[ ' + studentList + ' ]。\n' +
-    '請聽錄音，辨識老師說了哪些學生的出席狀況或分數。\n' +
-    '輸出純 JSON 陣列（不要加 markdown），格式：\n' +
-    '[{"name":"學生名","status":"符號","score":"分數或空字串","comment":"一句幽默評論"}]\n' +
-    '出席符號規則：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
-    '沒提到分數就填空字串。只輸出 JSON，不要其他文字。';
+  var prompt = '\u4f60\u662f\u9ede\u540d\u52a9\u624b\u3002\u5b78\u751f\u540d\u55ae\uff1a[ ' + studentList + ' ]\u3002\n' +
+    '\u8acb\u807d\u9304\u97f3\uff0c\u8fa8\u8b58\u8001\u5e2b\u8aaa\u4e86\u54ea\u4e9b\u5b78\u751f\u7684\u51fa\u5e2d\u72c0\u6cc1\u6216\u5206\u6578\u3002\n' +
+    '\u8f38\u51fa\u7d14 JSON \u9663\u5217\uff08\u4e0d\u8981\u52a0 markdown\uff09\uff0c\u683c\u5f0f\uff1a\n' +
+    '[{"name":"\u5b78\u751f\u540d","status":"\u7b26\u865f","score":"\u5206\u6578\u6216\u7a7a\u5b57\u4e32","comment":"\u4e00\u53e5\u5e7d\u9ed8\u8a55\u8ad6"}]\n' +
+    '\u51fa\u5e2d\u7b26\u865f\u898f\u5247\uff1a\u5230=V, \u7f3a\u5e2d=\u25cb, \u8acb\u5047=\u25b3, \u88dc\u8ab2\u7f3a\u5e2d=\u25cf, \u88dc\u8ab2\u8acb\u5047=\u25b2, \u9072\u5230=\u229d\n' +
+    '\u6c92\u63d0\u5230\u5206\u6578\u5c31\u586b\u7a7a\u5b57\u4e32\u3002\u53ea\u8f38\u51fa JSON\uff0c\u4e0d\u8981\u5176\u4ed6\u6587\u5b57\u3002';
 
   var payload = {
     contents: [{ parts: [
@@ -628,13 +628,13 @@ function callGemini(base64, mimeType, studentList, callback) {
   })
   .then(function(r){ return r.json(); })
   .then(function(data){
-    console.log('Gemini raw:', JSON.stringify(data));
+    // debug: data received
     if (!data.candidates || !data.candidates[0]) {
       var reason = (data.promptFeedback && data.promptFeedback.blockReason) || JSON.stringify(data);
       throw new Error('Gemini 無回應：' + reason);
     }
     var text = data.candidates[0].content.parts[0].text;
-    var updates = JSON.parse(text.replace(/```json|```/g,'').trim());
+    var cleaned = text.trim(); if(cleaned.indexOf('```') !== -1){ cleaned = cleaned.replace(/```json/g,'').replace(/```/g,'').trim(); } var updates = JSON.parse(cleaned);
     callback(null, updates);
   })
   .catch(function(err){ callback(err); });
@@ -647,7 +647,7 @@ function showToast(msg) {
   setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 2000);
 }
 
-// ── 頁籤 ─────────────────────────────────────────
+// \u2500\u2500 頁籤 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function switchTab(tab, btn) {
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
@@ -655,7 +655,7 @@ function switchTab(tab, btn) {
   btn.classList.add('active');
 }
 
-// ── 初始化 ───────────────────────────────────────
+// \u2500\u2500 初始化 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 window.addEventListener('load', function() {
   if (API_URL) document.getElementById('api-url').value = API_URL;
 
@@ -686,7 +686,7 @@ function loadClassList() {
   sel1.innerHTML = sel2.innerHTML = '<option value="">載入中...</option>';
   jsonpCall({ action:'getClassList' }, function(err, list) {
     if (err || !list || list.error) {
-      sel1.innerHTML = sel2.innerHTML = '<option value="">❌ 連線失敗</option>'; return;
+      sel1.innerHTML = sel2.innerHTML = '<option value="">\u274c 連線失敗</option>'; return;
     }
     var opts = '<option value="">請選擇班級...</option>';
     for (var i = 0; i < list.length; i++) opts += '<option value="'+list[i]+'">'+list[i]+'</option>';
@@ -696,7 +696,7 @@ function loadClassList() {
   });
 }
 
-// ══ 點名頁 ═══════════════════════════════════════
+// \u2550\u2550 點名頁 \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 function onClassChange() {
   var className = document.getElementById('class-sel').value;
   var dateSel   = document.getElementById('date-sel');
@@ -707,7 +707,7 @@ function onClassChange() {
   document.getElementById('lesson-info').style.display = 'none';
   if (!className) { dateSel.innerHTML = '<option value="">請先選班級</option>'; return; }
   jsonpCall({ action:'getAvailableDates', className:className }, function(err, dates) {
-    if (err || !dates) { dateSel.innerHTML = '<option value="">❌ 讀取失敗</option>'; return; }
+    if (err || !dates) { dateSel.innerHTML = '<option value="">\u274c 讀取失敗</option>'; return; }
     availDates = dates;
     if (!dates.length) { dateSel.innerHTML = '<option value="">（無可用堂次）</option>'; return; }
     var todayMMDD = getTodayMMDD();
@@ -740,7 +740,7 @@ function onDateChange() {
     document.getElementById('info-lesson').textContent  = (data.lessonText||'').replace(' 點名','') || '--';
     document.getElementById('info-teacher').textContent = data.teacherText || '--';
     document.getElementById('lesson-info').style.display = 'block';
-    setStatus('已載入 '+data.dateText+' · 共 '+data.students.length+' 位學生','ok');
+    setStatus('已載入 '+data.dateText+' \u00b7 共 '+data.students.length+' 位學生','ok');
     renderAttTable(); renderAttSummaryBar();
   });
 }
@@ -755,14 +755,14 @@ function writeOne(idx, status, score) {
     studentRow:st.row, attCol:classData.attCol, scoreCol:classData.scoreCol,
     status:(status!==null&&status!==undefined)?status:'',
     score: (score!==null&&score!==undefined)?score:''
-  }, function(err,r){ if(!r||!r.ok) addLog('⚠️ 寫入失敗',false); });
+  }, function(err,r){ if(!r||!r.ok) addLog('\u26a0\ufe0f 寫入失敗',false); });
 }
 
 function clickStatus(idx, sym) {
   var st=classData.students[idx];
   var newSym=st.status===sym?'':sym;
   writeOne(idx,newSym,null);
-  addLog(getDisplayName(st)+' → '+(newSym||'清除'),true);
+  addLog(getDisplayName(st)+' \u2192 '+(newSym||'清除'),true);
 }
 
 function getDisplayName(st){ return st.eName||st.cName||''; }
@@ -815,16 +815,16 @@ function renderAttRow(idx) {
   if(sb){var has=st.score!==''&&st.score!==null&&st.score!==undefined;sb.textContent=has?st.score:'--';sb.className='score-btn'+(has?' has-score':'');}
 }
 
-// ══ 語音錄音 → Gemini ════════════════════════════
+// \u2550\u2550 語音錄音 \u2192 Gemini \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 function toggleMic() {
   if (isRecording) { stopRecording(); } else { startRecording(); }
 }
 
 function startRecording() {
-  if (!classData) { setStatus('❌ 請先選班級與堂次','err'); return; }
+  if (!classData) { setStatus('\u274c 請先選班級與堂次','err'); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setStatus('❌ 瀏覽器不支援錄音，請使用 Chrome','err'); return;
+    setStatus('\u274c 瀏覽器不支援錄音，請使用 Chrome','err'); return;
   }
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
@@ -849,9 +849,9 @@ function startRecording() {
     isRecording = true;
 
     var btn = document.getElementById('mic-btn');
-    btn.textContent = '⏹ 停止錄音';
+    btn.textContent = '\u23f9 停止錄音';
     btn.className   = 'mic-btn recording';
-    setStatus('🔴 錄音中... 說完再按一次停止','info');
+    setStatus('\u1f534 錄音中... 說完再按一次停止','info');
 
     // 計時器（最多 60 秒自動停止）
     recSeconds = 0;
@@ -865,7 +865,7 @@ function startRecording() {
     }, 1000);
 
   }).catch(function(err) {
-    setStatus('❌ 無法取得麥克風：' + err.message, 'err');
+    setStatus('\u274c 無法取得麥克風：' + err.message, 'err');
   });
 }
 
@@ -877,10 +877,10 @@ function stopRecording() {
   mediaRecorder.stop();
 
   var btn = document.getElementById('mic-btn');
-  btn.textContent = '⏳ Gemini 辨識中...';
+  btn.textContent = '\u23f3 Gemini 辨識中...';
   btn.className   = 'mic-btn processing';
   btn.disabled    = true;
-  setStatus('⏳ 送出音訊，等待 Gemini 辨識...','info');
+  setStatus('\u23f3 送出音訊，等待 Gemini 辨識...','info');
 }
 
 function processAudio(mimeType) {
@@ -896,8 +896,8 @@ function processAudio(mimeType) {
 function sendToGemini(base64, mimeType) {
   if (!GEMINI_API_KEY) {
     var btn = document.getElementById('mic-btn');
-    btn.textContent = '🎤 開始錄音點名'; btn.className = 'mic-btn'; btn.disabled = false;
-    setStatus('❌ Gemini Key 尚未載入，請重新連線', 'err'); return;
+    btn.textContent = '\u1f3a4 開始錄音點名'; btn.className = 'mic-btn'; btn.disabled = false;
+    setStatus('\u274c Gemini Key 尚未載入，請重新連線', 'err'); return;
   }
   // 組學生名單給 Gemini 參考
   var studentList = classData.students.map(function(s){ return s.eName || s.cName; }).join(', ');
@@ -905,17 +905,17 @@ function sendToGemini(base64, mimeType) {
   callGemini(base64, mimeType, studentList, function(err, updates) {
     // 恢復按鈕狀態
     var btn = document.getElementById('mic-btn');
-    btn.textContent = '🎤 開始錄音點名';
+    btn.textContent = '\u1f3a4 開始錄音點名';
     btn.className   = 'mic-btn';
     btn.disabled    = false;
 
     if (err) {
-      setStatus('❌ Gemini 辨識失敗：' + err.message, 'err');
-      addLog('❌ Gemini 失敗：' + err.message, false);
+      setStatus('\u274c Gemini 辨識失敗：' + err.message, 'err');
+      addLog('\u274c Gemini 失敗：' + err.message, false);
       return;
     }
     if (!updates || !updates.length) {
-      setStatus('⚠️ Gemini 未辨識到任何學生','err'); return;
+      setStatus('\u26a0\ufe0f Gemini 未辨識到任何學生','err'); return;
     }
     applyGeminiResults(updates);
   });
@@ -968,7 +968,7 @@ function applyGeminiResults(updates) {
     document.getElementById('gemini-result').style.display = 'block';
   }
 
-  var msg = '✅ Gemini 完成：更新 ' + matched + ' 人';
+  var msg = '\u2705 Gemini 完成：更新 ' + matched + ' 人';
   if (skipped) msg += '，' + skipped + ' 人未比對到';
   setStatus(msg, 'ok');
   addLog(msg, true);
@@ -976,7 +976,7 @@ function applyGeminiResults(updates) {
   renderAttSummaryBar();
 }
 
-// ══ 總表頁 ═══════════════════════════════════════
+// \u2550\u2550 總表頁 \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 function onSumClassChange() {
   var className=document.getElementById('sum-class-sel').value;
   summaryData=null;
@@ -1014,7 +1014,7 @@ function renderSummaryTable() {
   });
 
   if(!filtered.length){
-    document.getElementById('summary-wrap').innerHTML='<div class="empty">✅ 沒有符合條件的學生</div>'; return;
+    document.getElementById('summary-wrap').innerHTML='<div class="empty">\u2705 沒有符合條件的學生</div>'; return;
   }
 
   var html='<div class="summary-table-wrap"><table class="summary-table"><thead><tr>';
@@ -1022,7 +1022,7 @@ function renderSummaryTable() {
   for(var l=0;l<lessons.length;l++)
     html+='<th title="'+lessons[l].date+' '+lessons[l].teacher+'">'+lessons[l].unit+'<br><span style="font-weight:400;opacity:.8">'+lessons[l].lesson+'</span></th>';
   for(var s=0;s<statsH.length;s++) html+='<th class="stats-col">'+statsH[s].name+'</th>';
-  html+='<th class="alert-col">⚠️ 未補課</th><th class="alert-col">📝 缺作業</th>';
+  html+='<th class="alert-col">\u26a0\ufe0f 未補課</th><th class="alert-col">\u1f4dd 缺作業</th>';
   html+='</tr></thead><tbody>';
 
   for(var i=0;i<filtered.length;i++){
@@ -1039,10 +1039,10 @@ function renderSummaryTable() {
     for(var l=0;l<lessons.length;l++){
       var rec=st.lessonRecords[l]||{att:'',score:'',attRow:0,attCol:0,scoreRow:0,scoreCol:0};
       var attCls=ATT_CLASS[rec.att]||'';
-      var needMakeup=rec.att==='○'||rec.att==='△';
-      var needHw=rec.att!=='○'&&rec.att!=='△'&&rec.att!=='●'&&rec.att!=='▲'&&rec.score===''&&(rec.att==='V'||rec.att==='⊝'||rec.att==='');
+      var needMakeup=rec.att==='\u25cb'||rec.att==='\u25b3';
+      var needHw=rec.att!=='\u25cb'&&rec.att!=='\u25b3'&&rec.att!=='\u25cf'&&rec.att!=='\u25b2'&&rec.score===''&&(rec.att==='V'||rec.att==='\u229d'||rec.att==='');
       var cellBg=needMakeup?'missing-makeup':(needHw?'missing-hw':'');
-      var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">·</span>';
+      var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">\u00b7</span>';
       var hasScore=rec.score!=='';
       var scoreDisplay=hasScore?rec.score:'<span style="color:#ccc">-</span>';
 
@@ -1056,10 +1056,10 @@ function renderSummaryTable() {
     var mkCls=st.missingMakeup.length?'alert-count has-issue':'alert-count';
     var hwCls=st.missingHw.length?'alert-count has-issue':'alert-count';
     html+='<td class="'+mkCls+'">'+
-      (st.missingMakeup.length?st.missingMakeup.length+' 堂<br><span style="font-size:10px;color:#856404">'+st.missingMakeup.slice(0,3).join(' ')+(st.missingMakeup.length>3?'...':'')+'</span>':'<span style="color:#ddd">✓</span>')+
+      (st.missingMakeup.length?st.missingMakeup.length+' 堂<br><span style="font-size:10px;color:#856404">'+st.missingMakeup.slice(0,3).join(' ')+(st.missingMakeup.length>3?'...':'')+'</span>':'<span style="color:#ddd">\u2713</span>')+
       '</td>';
     html+='<td class="'+hwCls+'">'+
-      (st.missingHw.length?st.missingHw.length+' 堂<br><span style="font-size:10px;color:#c0392b">'+st.missingHw.slice(0,3).join(' ')+(st.missingHw.length>3?'...':'')+'</span>':'<span style="color:#ddd">✓</span>')+
+      (st.missingHw.length?st.missingHw.length+' 堂<br><span style="font-size:10px;color:#c0392b">'+st.missingHw.slice(0,3).join(' ')+(st.missingHw.length>3?'...':'')+'</span>':'<span style="color:#ddd">\u2713</span>')+
       '</td>';
     html+='</tr>';
   }
@@ -1067,7 +1067,7 @@ function renderSummaryTable() {
   document.getElementById('summary-wrap').innerHTML=html;
 }
 
-// ── 出席符號彈窗 ──────────────────────────────────
+// \u2500\u2500 出席符號彈窗 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function openAttPopup(event, studentIdx, lessonIdx) {
   event.stopPropagation();
   var st  = summaryData.students[studentIdx];
@@ -1080,11 +1080,11 @@ function openAttPopup(event, studentIdx, lessonIdx) {
     var isSel = rec.att === sym;
     html += '<div class="att-popup-item'+(isSel?' selected':'')+'" onclick="selectAttSym(\''+sym+'\')" style="color:'+SYM_COLOR[sym]+'">';
     html += sym + ' ' + SYM_SHORT[sym];
-    if (isSel) html += ' ✓';
+    if (isSel) html += ' \u2713';
     html += '</div>';
   });
   html += '<div class="att-popup-divider"></div>';
-  html += '<div class="att-popup-item" onclick="selectAttSym(\'\')" style="color:#999">✕ 清除</div>';
+  html += '<div class="att-popup-item" onclick="selectAttSym(\'\')" style="color:#999">\u2715 清除</div>';
   popup.innerHTML = html;
   var rect = cellEl.getBoundingClientRect();
   popup.style.display = 'flex';
@@ -1105,8 +1105,8 @@ function selectAttSym(sym) {
     action:'writeCell', className:summaryData.className,
     row:rec.attRow, col:rec.attCol, value:sym
   }, function(err,r){
-    if(r&&r.ok) showToast('✅ 已更新');
-    else showToast('❌ 寫入失敗');
+    if(r&&r.ok) showToast('\u2705 已更新');
+    else showToast('\u274c 寫入失敗');
     renderSummaryTable();
   });
   closeAttPopup();
@@ -1117,7 +1117,7 @@ function closeAttPopup() {
   attPopupContext=null;
 }
 
-// ── 轉盤 ─────────────────────────────────────────
+// \u2500\u2500 轉盤 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function buildWheel() {
   var scroll=document.getElementById('wheel-scroll');
   var html='<div class="wheel-item" style="height:64px;"></div><div class="wheel-item" style="height:64px;"></div>';
@@ -1180,8 +1180,8 @@ function confirmScore() {
   if(ctx.mode==='attend'){
     var st=classData.students[ctx.studentIdx];
     writeOne(ctx.studentIdx,null,String(wheelValue));
-    addLog(getDisplayName(st)+' 分數 → '+wheelValue,true);
-    setStatus('✅ '+getDisplayName(st)+' 分數 → '+wheelValue+' 分','ok');
+    addLog(getDisplayName(st)+' 分數 \u2192 '+wheelValue,true);
+    setStatus('\u2705 '+getDisplayName(st)+' 分數 \u2192 '+wheelValue+' 分','ok');
   } else {
     var st=summaryData.students[ctx.studentIdx];
     var rec=st.lessonRecords[ctx.lessonIdx];
@@ -1190,8 +1190,8 @@ function confirmScore() {
       action:'writeCell', className:summaryData.className,
       row:rec.scoreRow, col:rec.scoreCol, value:wheelValue
     }, function(err,r){
-      if(r&&r.ok) showToast('✅ 已更新');
-      else showToast('❌ 寫入失敗');
+      if(r&&r.ok) showToast('\u2705 已更新');
+      else showToast('\u274c 寫入失敗');
       renderSummaryTable();
     });
   }
@@ -1205,7 +1205,7 @@ function clearScore() {
     var st=classData.students[ctx.studentIdx];
     writeOne(ctx.studentIdx,null,'');
     addLog(getDisplayName(st)+' 分數清除',true);
-    setStatus('✅ '+getDisplayName(st)+' 分數已清除','ok');
+    setStatus('\u2705 '+getDisplayName(st)+' 分數已清除','ok');
   } else {
     var st=summaryData.students[ctx.studentIdx];
     var rec=st.lessonRecords[ctx.lessonIdx];
@@ -1214,19 +1214,19 @@ function clearScore() {
       action:'writeCell', className:summaryData.className,
       row:rec.scoreRow, col:rec.scoreCol, value:''
     }, function(err,r){
-      if(r&&r.ok) showToast('✅ 已清除');
+      if(r&&r.ok) showToast('\u2705 已清除');
       renderSummaryTable();
     });
   }
   closeWheel();
 }
 
-// ── 工具函數 ──────────────────────────────────────
+// \u2500\u2500 工具函數 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function getTodayMMDD(){var now=new Date();return('0'+(now.getMonth()+1)).slice(-2)+'/'+('0'+now.getDate()).slice(-2);}
 function setStatus(msg,type){var el=document.getElementById('status-bar');el.textContent=msg;el.className='status-bar'+(type?' '+type:'');}
-function addLog(msg,ok){var log=document.getElementById('log');var t=new Date().toLocaleTimeString('zh-TW');log.innerHTML='<div class="log-item">['+t+'] '+(ok!==false?'✅':'❌')+' '+msg+'</div>'+log.innerHTML;}
+function addLog(msg,ok){var log=document.getElementById('log');var t=new Date().toLocaleTimeString('zh-TW');log.innerHTML='<div class="log-item">['+t+'] '+(ok!==false?'\u2705':'\u274c')+' '+msg+'</div>'+log.innerHTML;}
 
-// ══ 成績單頁 ═══════════════════════════════════════
+// \u2550\u2550 成績單頁 \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var reportData     = null;  // 目前載入的學生成績資料
 var reportClassStudents = []; // 班級學生清單 { row, cName, eName }
 var perfScore      = 80;
@@ -1275,7 +1275,7 @@ function loadStudentReport() {
   jsonpCall({ action:'getStudentReport', className:className, studentRow:row }, function(err, data) {
     document.getElementById('rpt-load-btn').disabled = false;
     document.getElementById('rpt-load-btn').textContent = '載入成績單';
-    if (err || !data || data.error) { showToast('❌ 載入失敗：'+(data&&data.error||'')); return; }
+    if (err || !data || data.error) { showToast('\u274c 載入失敗：'+(data&&data.error||'')); return; }
     reportData = data;
     document.getElementById('parent-email').value = data.parentEmail || '';
     document.getElementById('report-main').style.display  = 'block';
@@ -1298,7 +1298,7 @@ function renderReport() {
 
   // 出勤描述
   var attDesc = (d.leaveCount === 0 && d.absenceCount === 0)
-    ? '🌟 全勤 (Perfect Attendance)'
+    ? '\u1f31f 全勤 (Perfect Attendance)'
     : '請假 ' + d.leaveCount + ' / 缺席 ' + d.absenceCount;
 
   // 學期總分（顏色）
@@ -1307,7 +1307,7 @@ function renderReport() {
   var html = '';
   // Header
   html += '<div class="rpt-header">';
-  html += '<h3>🎓 ' + d.className + ' 學習成果報告單</h3>';
+  html += '<h3>\u1f393 ' + d.className + ' 學習成果報告單</h3>';
   html += '<p>' + d.today + ' &nbsp;|&nbsp; ' + d.teacher + ' 老師</p>';
   html += '</div>';
 
@@ -1345,7 +1345,7 @@ function renderReport() {
 
   // 大小考成績
   if (d.scoreDetails && d.scoreDetails.length > 0) {
-    html += '<div class="rpt-scores-title">📝 本學期大小考成績</div>';
+    html += '<div class="rpt-scores-title">\u1f4dd 本學期大小考成績</div>';
     html += '<div class="rpt-scores-grid">';
     d.scoreDetails.forEach(function(s) {
       var isPerfect = s.score === '100';
@@ -1358,7 +1358,7 @@ function renderReport() {
   }
 
   // 評語
-  html += '<div class="rpt-comment-title">💬 老師綜合評語 (Comments)</div>';
+  html += '<div class="rpt-comment-title">\u1f4ac 老師綜合評語 (Comments)</div>';
   html += '<textarea class="rpt-comment-area" id="rpt-comment" placeholder="點「Gemini 生成評語」或直接輸入..."></textarea>';
   html += '<div style="font-size:11px;color:#999;text-align:right;margin-top:4px;">'+d.teacher+' 老師 簽章</div>';
 
@@ -1446,26 +1446,22 @@ function drawRadar(vals) {
   }
 }
 
-// ── 生成評語（Gemini）────────────────────────────
+// \u2500\u2500 生成評語（Gemini）\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function genComment() {
-  if (!reportData || !GEMINI_API_KEY) { showToast('❌ 請先載入成績單並連線'); return; }
+  if (!reportData || !GEMINI_API_KEY) { showToast('\u274c 請先載入成績單並連線'); return; }
   var d = reportData;
   var btn = document.querySelector('.rpt-btn.secondary');
-  btn.textContent = '⏳ 生成中...'; btn.disabled = true;
+  btn.textContent = '\u23f3 生成中...'; btn.disabled = true;
 
-  var prompt = '你是一位英語補習班老師，請用中文寫一段30-50字的學生學期評語。
-' +
-    '學生：' + (d.eName||d.cName) + '
-' +
-    '班級：' + d.className + '
-' +
-    '學期總分：' + d.totalScore.toFixed(1) + '
-' +
-    '出勤：請假 ' + d.leaveCount + ' 次，缺席 ' + d.absenceCount + ' 次
-' +
-    '作業均分：' + d.hwAvg + '，小考：' + d.quizAvg + '，大考：' + d.testAvg + '，口語表現：' + perfScore + '
-' +
-    '請根據數據給出溫暖、具體、正向的評語，並提出一個改進建議。只輸出評語文字，不要其他說明。';
+  var prompt = [
+    '你是一位英語補習班老師，請用中文寫一段30-50字的學生學期評語。',
+    '學生：' + (d.eName||d.cName),
+    '班級：' + d.className,
+    '學期總分：' + d.totalScore.toFixed(1),
+    '出勤：請假 ' + d.leaveCount + ' 次，缺席 ' + d.absenceCount + ' 次',
+    '作業均分：' + d.hwAvg + '，小考：' + d.quizAvg + '，大考：' + d.testAvg + '，口語表現：' + perfScore,
+    '請根據數據給出溫暖、具體、正向的評語，並提出一個改進建議。只輸出評語文字，不要其他說明。'
+  ].join('\n')
 
   fetch(GEMINI_URL, {
     method: 'POST',
@@ -1474,49 +1470,49 @@ function genComment() {
   })
   .then(function(r){ return r.json(); })
   .then(function(data){
-    btn.textContent = '🤖 Gemini 生成評語'; btn.disabled = false;
-    if (!data.candidates || !data.candidates[0]) { showToast('❌ Gemini 無回應'); return; }
+    btn.textContent = '\u1f916 Gemini 生成評語'; btn.disabled = false;
+    if (!data.candidates || !data.candidates[0]) { showToast('\u274c Gemini 無回應'); return; }
     var comment = data.candidates[0].content.parts[0].text.trim();
     document.getElementById('rpt-comment').value = comment;
   })
   .catch(function(err){
-    btn.textContent = '🤖 Gemini 生成評語'; btn.disabled = false;
-    showToast('❌ 生成失敗：' + err.message);
+    btn.textContent = '\u1f916 Gemini 生成評語'; btn.disabled = false;
+    showToast('\u274c 生成失敗：' + err.message);
   });
 }
 
-// ── 儲存家長 Email ───────────────────────────────
+// \u2500\u2500 儲存家長 Email \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function saveParentEmail() {
   if (!reportData) return;
   var email = document.getElementById('parent-email').value.trim();
-  if (!email) { showToast('❌ 請輸入 Email'); return; }
+  if (!email) { showToast('\u274c 請輸入 Email'); return; }
   jsonpCall({
     action: 'saveParentEmail',
     className:   reportData.className,
     studentRow:  reportData.studentRow,
     email:       email
   }, function(err, r) {
-    if (r && r.ok) showToast('✅ Email 已儲存');
-    else showToast('❌ 儲存失敗：' + (r && r.msg || ''));
+    if (r && r.ok) showToast('\u2705 Email 已儲存');
+    else showToast('\u274c 儲存失敗：' + (r && r.msg || ''));
   });
 }
 
-// ── 寄送 Email ───────────────────────────────────
+// \u2500\u2500 寄送 Email \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function sendReportEmail() {
   if (!reportData) return;
   var email = document.getElementById('parent-email').value.trim();
-  if (!email) { showToast('❌ 請先填入家長 Email'); return; }
+  if (!email) { showToast('\u274c 請先填入家長 Email'); return; }
 
   var comment  = document.getElementById('rpt-comment').value.trim();
   var d        = reportData;
   var attDesc  = (d.leaveCount === 0 && d.absenceCount === 0)
-    ? '🌟 全勤' : '請假 ' + d.leaveCount + ' / 缺席 ' + d.absenceCount;
+    ? '\u1f31f 全勤' : '請假 ' + d.leaveCount + ' / 缺席 ' + d.absenceCount;
   var attScore = parseFloat((d.attendanceRate * 100).toFixed(1));
 
   // 組 HTML Email 內容
   var htmlBody = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">';
   htmlBody += '<div style="background:#274e13;color:white;padding:16px 20px;border-radius:8px 8px 0 0;text-align:center;">';
-  htmlBody += '<h2 style="margin:0;font-size:17px;">🎓 ' + d.className + ' 學習成果報告單</h2></div>';
+  htmlBody += '<h2 style="margin:0;font-size:17px;">\u1f393 ' + d.className + ' 學習成果報告單</h2></div>';
   htmlBody += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
   htmlBody += '<tr><td style="padding:8px 14px;background:#f8f8f8;font-weight:bold;">學生姓名</td><td style="padding:8px 14px;">'+(d.eName||d.cName)+(d.cName&&d.eName?' ('+d.cName+')':'')+'</td>';
   htmlBody += '<td style="padding:8px 14px;background:#f8f8f8;font-weight:bold;">學期總分</td><td style="padding:8px 14px;font-weight:bold;color:#274e13;">'+d.totalScore.toFixed(1)+'</td></tr>';
@@ -1533,8 +1529,7 @@ function sendReportEmail() {
   htmlBody += '</table>';
   if (comment) {
     htmlBody += '<div style="margin-top:12px;padding:12px 14px;background:#fff8e1;border-radius:6px;">';
-    htmlBody += '<b>💬 老師評語</b><br><br>' + comment.replace(/
-/g,'<br>') + '</div>';
+    htmlBody += '<b>\u1f4ac 老師評語</b><br><br>' + comment.replace(/\n/g,'<br>') + '</div>';
   }
   htmlBody += '<p style="font-size:11px;color:#999;text-align:right;margin-top:12px;">'+d.teacher+' 老師　'+d.today+'</p>';
   htmlBody += '</div>';
@@ -1553,13 +1548,13 @@ function sendReportEmail() {
   })
   .then(function(r){ return r.json(); })
   .then(function(result){
-    if (result && result.ok) showToast('✅ 已寄出至 ' + email);
-    else showToast('❌ 寄送失敗：' + (result && result.msg || ''));
+    if (result && result.ok) showToast('\u2705 已寄出至 ' + email);
+    else showToast('\u274c 寄送失敗：' + (result && result.msg || ''));
   })
-  .catch(function(err){ showToast('❌ 寄送失敗：' + err.message); });
+  .catch(function(err){ showToast('\u274c 寄送失敗：' + err.message); });
 }
 
-// ── PDF 下載 ─────────────────────────────────────
+// \u2500\u2500 PDF 下載 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function downloadPDF() {
   if (!reportData) return;
   // 用瀏覽器列印功能輸出 PDF
@@ -1597,9 +1592,9 @@ function downloadPDF() {
   win.document.write('</style></head><body>');
 
   // Header
-  var attDesc = (d.leaveCount===0&&d.absenceCount===0)?'🌟 全勤':'請假 '+d.leaveCount+' / 缺席 '+d.absenceCount;
+  var attDesc = (d.leaveCount===0&&d.absenceCount===0)?'\u1f31f 全勤':'請假 '+d.leaveCount+' / 缺席 '+d.absenceCount;
   var totalCls = d.totalScore>=90?'green':d.totalScore<60?'red':'';
-  win.document.write('<div class="rpt-header"><h3>🎓 '+d.className+' 學習成果報告單</h3><p>'+d.today+' | '+d.teacher+' 老師</p></div>');
+  win.document.write('<div class="rpt-header"><h3>\u1f393 '+d.className+' 學習成果報告單</h3><p>'+d.today+' | '+d.teacher+' 老師</p></div>');
   win.document.write('<div class="rpt-meta">');
   win.document.write('<div class="rpt-meta-cell"><div class="mc-label">學生姓名</div><div class="mc-val">'+(d.eName||d.cName)+(d.cName&&d.eName?' ('+d.cName+')':'')+'</div></div>');
   win.document.write('<div class="rpt-meta-cell"><div class="mc-label">學期總分</div><div class="mc-val '+totalCls+'">'+d.totalScore.toFixed(1)+'</div></div>');
@@ -1627,7 +1622,7 @@ function downloadPDF() {
 
   // 大小考
   if (d.scoreDetails && d.scoreDetails.length > 0) {
-    win.document.write('<div class="scores-title">📝 本學期大小考成績</div>');
+    win.document.write('<div class="scores-title">\u1f4dd 本學期大小考成績</div>');
     win.document.write('<div class="scores-grid">');
     d.scoreDetails.forEach(function(s){
       win.document.write('<div class="score-chip"><span class="sc-label">'+s.label+'</span><span class="sc-val'+(s.score==='100'?' perfect':'')+'">'+s.score+'</span></div>');
@@ -1636,14 +1631,13 @@ function downloadPDF() {
   }
 
   // 評語
-  win.document.write('<div class="comment-title">💬 老師綜合評語 (Comments)</div>');
-  win.document.write('<div class="comment-box">'+(comment||'').replace(/
-/g,'<br>')+'</div>');
+  win.document.write('<div class="comment-title">\u1f4ac 老師綜合評語 (Comments)</div>');
+  win.document.write('<div class="comment-box">'+(comment||'').replace(/\n/g,'<br>')+'</div>');
   win.document.write('<p style="font-size:11px;color:#999;text-align:right;margin-top:8px;">'+d.teacher+' 老師 簽章</p>');
   win.document.write('</div>');
 
   // 雷達圖 JS
-  win.document.write('<script>');
+  win.document.write('<' + 'script>');
   win.document.write('window.onload=function(){');
   win.document.write('var canvas=document.getElementById("pdf-radar");');
   win.document.write('var ctx=canvas.getContext("2d");');
@@ -1660,7 +1654,7 @@ function downloadPDF() {
   win.document.write('for(var i=0;i<N;i++){var a=(i/N)*Math.PI*2-Math.PI/2;ctx.fillStyle=colors[i];ctx.fillText(labels[i],cx+(R+22)*Math.cos(a),cy+(R+22)*Math.sin(a));}');
   win.document.write('setTimeout(function(){window.print();},300);');
   win.document.write('};');
-  win.document.write('<\/script>');
+  win.document.write('<' + '/script>');
   win.document.write('</body></html>');
   win.document.close();
 }
@@ -1682,7 +1676,7 @@ function syncExamClassList(list) {
   sel.innerHTML = opts;
 }
 
-// ══ 考試成績頁 ═══════════════════════════════════
+// \u2550\u2550 考試成績頁 \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var examData        = null;  // { className, exams, students }
 var currentExamIdx  = -1;   // 目前選的考試 index
 var pendingChanges  = {};   // { row: score } 待儲存的改動
@@ -1703,7 +1697,7 @@ function onExamClassChange() {
     document.getElementById('exam-loading').style.display = 'none';
     if (err || !data || data.error) {
       document.getElementById('exam-empty').style.display = 'block';
-      document.getElementById('exam-empty').innerHTML = '<div class="empty">❌ '+(data&&data.error||'載入失敗')+'</div>';
+      document.getElementById('exam-empty').innerHTML = '<div class="empty">\u274c '+(data&&data.error||'載入失敗')+'</div>';
       return;
     }
     examData = data;
@@ -1778,7 +1772,7 @@ function renderExamTable() {
     html += 'onkeydown="onScoreKeydown(event,'+i+')">';
     html += '</td>';
     html += '<td style="text-align:center;">';
-    html += '<button onclick="clearScore('+i+')" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;" title="清除">✕</button>';
+    html += '<button onclick="clearScore('+i+')" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;" title="清除">\u2715</button>';
     html += '</td>';
     html += '</tr>';
   });
@@ -1829,7 +1823,7 @@ function updateSaveInfo() {
   var changed = Object.keys(pendingChanges).length;
   var info = document.getElementById('exam-save-info');
   if (changed > 0) {
-    info.innerHTML = '<span style="color:#c0392b;font-weight:700;">⚠️ 有 ' + changed + ' 筆未儲存</span>';
+    info.innerHTML = '<span style="color:#c0392b;font-weight:700;">\u26a0\ufe0f 有 ' + changed + ' 筆未儲存</span>';
   } else {
     info.textContent = 'Tab 鍵切換下一位學生';
   }
@@ -1862,7 +1856,7 @@ function saveExamScores() {
   });
 
   var btn = document.querySelector('#exam-score-card .rpt-btn');
-  btn.textContent = '⏳ 儲存中...'; btn.disabled = true;
+  btn.textContent = '\u23f3 儲存中...'; btn.disabled = true;
 
   // saveExamScores 資料量可能大，用 POST
   fetch(API_URL, {
@@ -1877,22 +1871,23 @@ function saveExamScores() {
   })
   .then(function(r){ return r.json(); })
   .then(function(result) {
-    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
+    btn.textContent = '\u1f4be 儲存全部分數'; btn.disabled = false;
     if (result && result.ok) {
       // 更新本地快取
       examData.exams[currentExamIdx].scores = scores.map(function(s){ return s.score; });
       pendingChanges = {};
       updateSaveInfo();
-      showToast('✅ ' + result.msg);
+      showToast('\u2705 ' + result.msg);
     } else {
-      showToast('❌ 儲存失敗：' + (result && result.msg || ''));
+      showToast('\u274c 儲存失敗：' + (result && result.msg || ''));
     }
   })
   .catch(function(err) {
-    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
-    showToast('❌ 儲存失敗：' + err.message);
+    btn.textContent = '\u1f4be 儲存全部分數'; btn.disabled = false;
+    showToast('\u274c 儲存失敗：' + err.message);
   });
 }
 
+</script>
 </body>
 </html>
