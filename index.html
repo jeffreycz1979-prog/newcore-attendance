@@ -321,6 +321,35 @@
   .exam-save-bar { display:flex; gap:8px; align-items:center; padding-top:10px;
                    border-top:1px solid #f0f0f0; margin-top:8px; }
   .exam-save-info { font-size:12px; color:#888; flex:1; }
+
+  /* ══ 總覽頁 ══ */
+  .overview-toolbar { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
+  .overview-toolbar select { width:auto; flex:1; min-width:150px; }
+  .threshold-box { display:flex; align-items:center; gap:6px; }
+  .threshold-box label { font-size:11px; color:#888; white-space:nowrap; margin:0; }
+  .threshold-input { width:64px; padding:8px 8px; border:1px solid #ddd; border-radius:8px;
+                     font-size:14px; font-weight:700; text-align:center; color:#274e13; }
+  .class-card { background:white; border-radius:12px; margin-bottom:14px;
+                box-shadow:0 1px 4px rgba(0,0,0,.08); overflow:hidden; }
+  .class-card-header { background:#274e13; color:white; padding:10px 16px;
+                       display:flex; align-items:center; gap:10px; }
+  .class-card-header h4 { font-size:14px; font-weight:700; flex:1; margin:0; }
+  .class-card-badge { background:rgba(255,255,255,0.2); border-radius:10px;
+                      padding:2px 10px; font-size:11px; }
+  .class-card-badge.warn { background:#f39c12; }
+  .class-card-badge.ok   { background:rgba(255,255,255,0.15); }
+  .class-card-body { padding:12px 16px; }
+  .alert-section-title { font-size:11px; font-weight:700; color:#666; text-transform:uppercase;
+                         letter-spacing:.04em; margin:10px 0 6px; }
+  .alert-section-title:first-child { margin-top:0; }
+  .alert-row { display:flex; align-items:flex-start; gap:10px; padding:5px 0;
+               border-bottom:1px solid #f5f5f5; font-size:12px; }
+  .alert-row:last-child { border-bottom:none; }
+  .alert-name { font-weight:700; min-width:80px; color:#222; }
+  .alert-detail { color:#666; flex:1; line-height:1.6; }
+  .alert-score { font-weight:700; color:#c0392b; min-width:36px; text-align:right; }
+  .no-alert { color:#bbb; font-size:12px; padding:6px 0; }
+  .overview-loading { text-align:center; color:#aaa; padding:30px; }
 </style>
 </head>
 <body>
@@ -361,6 +390,7 @@
     <button class="tab-btn"        onclick="switchTab('summary',this)">總表</button>
     <button class="tab-btn"        onclick="switchTab('report',this)">成績單</button>
     <button class="tab-btn"        onclick="switchTab('exam',this)">考試成績</button>
+    <button class="tab-btn" id="tab-overview" style="display:none;" onclick="switchTab('overview',this)">📊 總覽</button>
   </div>
 </div>
 
@@ -543,6 +573,28 @@
     <div id="report-empty" class="card"><div class="empty">請選擇班級與學生</div></div>
   </div>
 
+  <!-- ══ 總覽頁 ══ -->
+  <div class="page" id="page-overview">
+    <div class="card">
+      <div class="overview-toolbar">
+        <div style="flex:1;min-width:150px;">
+          <label>選擇老師</label>
+          <select id="overview-teacher-sel" onchange="onOverviewTeacherChange()">
+            <option value="">請選擇老師...</option>
+          </select>
+        </div>
+        <div class="threshold-box">
+          <label>成績警示門檻</label>
+          <input type="number" class="threshold-input" id="overview-threshold"
+                 value="80" min="0" max="100" step="5">
+          <span style="font-size:11px;color:#888;">分</span>
+        </div>
+        <button class="rpt-btn" onclick="loadOverview()">🔍 查詢</button>
+      </div>
+    </div>
+    <div id="overview-result"><div class="empty">請選擇老師後按查詢</div></div>
+  </div>
+
 </div><!-- /.body -->
 </div><!-- /#main-screen -->
 
@@ -713,8 +765,28 @@ function onLoginSuccess(data) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-screen').style.display  = 'block';
 
-  // 載入班級清單（只顯示有權限的班級）
-  populateAllClassSelects(data.myClasses);
+  // 只有 admin 顯示總覽頁籤
+  var overviewTab = document.getElementById('tab-overview');
+  if (overviewTab) {
+    overviewTab.style.display = data.role === 'admin' ? 'inline-block' : 'none';
+    if (data.role === 'admin') initOverviewTab();
+  }
+
+  // 載入老師有權限的班級清單
+  jsonpCall({ action: 'getMyClasses', authCode: AUTH_CODE }, function(err, data) {
+    if (err || !data || !data.ok) {
+      populateAllClassSelects([]);
+      return;
+    }
+    // admin 的 myClasses 為 null，改呼叫 getClassList 取全部
+    if (data.role === 'admin' || !data.myClasses) {
+      jsonpCall({ action: 'getClassList' }, function(err2, list) {
+        populateAllClassSelects((!err2 && list && !list.error) ? list : []);
+      });
+    } else {
+      populateAllClassSelects(data.myClasses);
+    }
+  });
   loadGeminiKey();
 }
 
@@ -1096,6 +1168,47 @@ function setFilter(f) {
   if(summaryData) renderSummaryTable();
 }
 
+// 局部更新總表單一格（不重繪整個表格，避免頁面跳回頂部）
+function updateSummaryCell(studentIdx, lessonIdx) {
+  if (!summaryData) return;
+  var st  = summaryData.students[studentIdx];
+  var rec = st.lessonRecords[lessonIdx];
+  var cellId = 'scell-' + studentIdx + '-' + lessonIdx;
+  var td = document.getElementById(cellId);
+  if (!td) { renderSummaryTable(); return; }
+
+  var attCls     = ATT_CLASS[rec.att] || '';
+  var needMakeup = (rec.att === '○' || rec.att === '△');
+  var needHw     = (rec.att !== '' && rec.att !== '●' && rec.att !== '▲' && rec.score === '');
+  td.className   = needMakeup ? 'missing-makeup' : (needHw ? 'missing-hw' : '');
+
+  var attDisplay = rec.att
+    ? '<span class="' + attCls + '">' + rec.att + '</span>'
+    : '<span style="color:#ddd">·</span>';
+  var hasScore     = (rec.score !== '');
+  var scoreDisplay = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
+
+  // 建立 att span
+  var attEl = document.createElement('span');
+  attEl.className = 'cell-att';
+  attEl.title = '點擊修改出席';
+  attEl.innerHTML = attDisplay;
+  attEl.onclick = (function(si, li){ return function(e){ openAttPopup(e, si, li); }; })(studentIdx, lessonIdx);
+
+  // 建立 score span
+  var scoreEl = document.createElement('span');
+  scoreEl.className = 'cell-score' + (hasScore ? ' has-score' : '');
+  scoreEl.title = '點擊修改分數';
+  scoreEl.innerHTML = scoreDisplay;
+  scoreEl.onclick = (function(si, li){ return function(){ openWheel(si, 'summary', li); }; })(studentIdx, lessonIdx);
+
+  var br = document.createElement('br');
+  td.innerHTML = '';
+  td.appendChild(attEl);
+  td.appendChild(br);
+  td.appendChild(scoreEl);
+}
+
 function renderSummaryTable() {
   if(!summaryData) return;
   var lessons=summaryData.lessons, students=summaryData.students, statsH=summaryData.statsHeaders;
@@ -1117,9 +1230,10 @@ function renderSummaryTable() {
 
   var html='<div class="summary-table-wrap"><table class="summary-table"><thead><tr>';
   html+='<th class="name-col">學生</th>';
-  for(var l=0;l<lessons.length;l++)
+  for(var l=0;l<lessons.length;l++){
     var dateShort = lessons[l].date ? '<br><span style="font-weight:400;opacity:.65;font-size:10px;">'+lessons[l].date+'</span>' : '';
     html+='<th title="'+lessons[l].date+' '+lessons[l].teacher+'">'+lessons[l].unit+' '+lessons[l].lesson+dateShort+'</th>';
+  }
   for(var s=0;s<statsH.length;s++) html+='<th class="stats-col">'+statsH[s].name+'</th>';
   html+='<th class="alert-col">⚠️ 未補課</th><th class="alert-col">📝 缺作業</th>';
   html+='</tr></thead><tbody>';
@@ -1143,7 +1257,7 @@ function renderSummaryTable() {
       var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">·</span>';
       var hasScore=rec.score!=='';
       var scoreDisplay=hasScore?rec.score:'<span style="color:#ccc">-</span>';
-      html+='<td class="'+cellBg+'">';
+      html+='<td id="scell-'+origIdx+'-'+l+'" class="'+cellBg+'">';
       html+='<span class="cell-att" onclick="openAttPopup(event,'+origIdx+','+l+')" title="點擊修改出席">'+attDisplay+'</span>';
       html+='<br><span class="cell-score'+(hasScore?' has-score':'')+'" onclick="openWheel('+origIdx+',\'summary\','+l+')" title="點擊修改分數">'+scoreDisplay+'</span>';
       html+='</td>';
@@ -1195,17 +1309,24 @@ function selectAttSym(sym) {
   var ctx = attPopupContext;
   var st  = summaryData.students[ctx.studentIdx];
   var rec = st.lessonRecords[ctx.lessonIdx];
+  var oldAtt = rec.att;
+  // 樂觀更新：先更新畫面，背景再寫入
   rec.att = sym;
+  updateSummaryCell(ctx.studentIdx, ctx.lessonIdx);
+  closeAttPopup();
   jsonpCall({
     action:'writeCell', authCode: AUTH_CODE,
     className:summaryData.className,
     row:rec.attRow, col:rec.attCol, value:sym
   }, function(err,r){
     if(r&&r.ok) showToast('✅ 已更新');
-    else showToast('❌ 寫入失敗：' + (r&&r.msg||''));
-    renderSummaryTable();
+    else {
+      // 寫入失敗：還原資料和畫面
+      rec.att = oldAtt;
+      updateSummaryCell(ctx.studentIdx, ctx.lessonIdx);
+      showToast('❌ 寫入失敗：' + (r&&r.msg||''));
+    }
   });
-  closeAttPopup();
 }
 
 function closeAttPopup() {
@@ -1281,16 +1402,26 @@ function confirmScore() {
   } else {
     var st=summaryData.students[ctx.studentIdx];
     var rec=st.lessonRecords[ctx.lessonIdx];
-    rec.score=String(wheelValue);
+    var oldScore = rec.score;
+    var sIdx = ctx.studentIdx, lIdx = ctx.lessonIdx;
+    // 樂觀更新：先更新畫面，背景再寫入
+    rec.score = String(wheelValue);
+    closeWheel();
+    updateSummaryCell(sIdx, lIdx);
     jsonpCall({
       action:'writeCell', authCode: AUTH_CODE,
       className:summaryData.className,
       row:rec.scoreRow, col:rec.scoreCol, value:wheelValue
     }, function(err,r){
       if(r&&r.ok) showToast('✅ 已更新');
-      else showToast('❌ 寫入失敗：' + (r&&r.msg||''));
-      renderSummaryTable();
+      else {
+        // 寫入失敗：還原資料和畫面
+        rec.score = oldScore;
+        updateSummaryCell(sIdx, lIdx);
+        showToast('❌ 寫入失敗：' + (r&&r.msg||''));
+      }
     });
+    return; // closeWheel 已在上面呼叫
   }
   closeWheel();
 }
@@ -1306,15 +1437,25 @@ function clearScore() {
   } else {
     var st=summaryData.students[ctx.studentIdx];
     var rec=st.lessonRecords[ctx.lessonIdx];
-    rec.score='';
+    var oldScore = rec.score;
+    var sIdx = ctx.studentIdx, lIdx = ctx.lessonIdx;
+    // 樂觀更新：先更新畫面，背景再寫入
+    rec.score = '';
+    closeWheel();
+    updateSummaryCell(sIdx, lIdx);
     jsonpCall({
       action:'writeCell', authCode: AUTH_CODE,
       className:summaryData.className,
       row:rec.scoreRow, col:rec.scoreCol, value:''
     }, function(err,r){
       if(r&&r.ok) showToast('✅ 已清除');
-      renderSummaryTable();
+      else {
+        rec.score = oldScore;
+        updateSummaryCell(sIdx, lIdx);
+        showToast('❌ 清除失敗');
+      }
     });
+    return;
   }
   closeWheel();
 }
@@ -1889,42 +2030,52 @@ function callGeminiSummary(base64, mimeType, className) {
       });
     });
 
-    if (!cells.length && notFound.length) {
-      showSumStatus('⚠️ 未找到對應資料：' + notFound.join('、'), 'err'); return;
+    if (!cells.length) {
+      showSumStatus(notFound.length ? '⚠️ 未找到對應資料：' + notFound.join('、') : '⚠️ 沒有可寫入的資料', 'err');
+      return;
     }
 
-    // 預覽確認
-    var preview = '即將寫入 ' + cells.length + ' 格';
-    if (notFound.length) preview += '（' + notFound.length + ' 項未找到：' + notFound.join('、') + '）';
-    preview += '，確認嗎？';
-    if (!confirm(preview)) {
-      showSumStatus('已取消', 'info'); return;
+    // 分批 JSONP 寫入（每批最多 15 格，避免 URL 超長）
+    showSumStatus('⏳ 寫入中...', 'info');
+    var BATCH = 15;
+    var batches = [];
+    for (var bi = 0; bi < cells.length; bi += BATCH) {
+      batches.push(cells.slice(bi, bi + BATCH));
     }
+    var batchIdx = 0;
+    var failed = 0;
 
-    // JSONP 逐格寫入（避免 CORS）
-    showSumStatus('⏳ 寫入中 0 / ' + cells.length + ' 格...', 'info');
-    var idx = 0;
-    function writeNext() {
-      if (idx >= cells.length) {
-        showSumStatus('✅ 已寫入 ' + cells.length + ' 格' + (notFound.length ? '，未找到：' + notFound.join('、') : ''), 'ok');
-        onSumClassChange();
+    function writeBatch() {
+      if (batchIdx >= batches.length) {
+        // 全部完成：局部更新 summaryData 並重繪
+        cells.forEach(function(c) {
+          if (!summaryData) return;
+          summaryData.students.forEach(function(st) {
+            if (st.sheetRow !== c.row) return;
+            st.lessonRecords.forEach(function(rec) {
+              if (rec.attCol === c.col)   rec.att   = c.value;
+              if (rec.scoreCol === c.col) rec.score = c.value;
+            });
+          });
+        });
+        var msg = '✅ 已寫入 ' + cells.length + ' 格';
+        if (failed) msg += '，' + failed + ' 批失敗';
+        if (notFound.length) msg += '　⚠️ 未找到：' + notFound.join('、');
+        showSumStatus(msg, failed ? 'err' : 'ok');
+        renderSummaryTable();
         return;
       }
-      var c = cells[idx];
-      idx++;
-      showSumStatus('⏳ 寫入中 ' + idx + ' / ' + cells.length + ' 格...', 'info');
+      var batch = batches[batchIdx++];
       jsonpCall({
-        action: 'writeCell', authCode: AUTH_CODE,
-        className: className, row: c.row, col: c.col, value: c.value
+        action: 'writeSummaryCells', authCode: AUTH_CODE,
+        className: className,
+        cells: JSON.stringify(batch)
       }, function(err, r) {
-        if (err || !r || !r.ok) {
-          showSumStatus('❌ 第 ' + idx + ' 格寫入失敗：' + (r && r.msg || (err && err.message) || ''), 'err');
-          return;
-        }
-        writeNext();
+        if (err || !r || !r.ok) { failed++; }
+        writeBatch();
       });
     }
-    writeNext();
+    writeBatch();
   })
   .catch(function(err) {
     var btn = document.getElementById('sum-mic-btn');
@@ -2141,6 +2292,141 @@ function saveExamScores() {
     showToast('❌ 儲存失敗：' + err.message);
   });
 }
+
+// ══════════════════════════════════════════════
+// 總覽頁（管理員專用）
+// ══════════════════════════════════════════════
+
+function initOverviewTab() {
+  // 載入老師清單
+  jsonpCall({ action: 'getTeacherList' }, function(err, data) {
+    if (err || !data || data.error) return;
+    var sel = document.getElementById('overview-teacher-sel');
+    var opts = '<option value="">請選擇老師...</option>';
+    data.forEach(function(t) {
+      opts += '<option value="' + t.name + '">' + t.name + (t.role === 'admin' ? ' ★' : '') + '</option>';
+    });
+    sel.innerHTML = opts;
+  });
+}
+
+function onOverviewTeacherChange() {
+  document.getElementById('overview-result').innerHTML = '<div class="empty">請按查詢載入資料</div>';
+}
+
+function loadOverview() {
+  var teacherName = document.getElementById('overview-teacher-sel').value;
+  var threshold   = parseFloat(document.getElementById('overview-threshold').value) || 80;
+  if (!teacherName) { showToast('❌ 請先選擇老師'); return; }
+
+  document.getElementById('overview-result').innerHTML = '<div class="overview-loading">⏳ 載入中，請稍候...</div>';
+
+  jsonpCall({
+    action: 'getTeacherOverview',
+    teacherName: teacherName,
+    threshold: threshold
+  }, function(err, data) {
+    if (err || !data || data.error) {
+      document.getElementById('overview-result').innerHTML = '<div class="empty">❌ 載入失敗</div>';
+      return;
+    }
+    renderOverview(data, threshold);
+  });
+}
+
+function renderOverview(data, threshold) {
+  if (!data.classes || !data.classes.length) {
+    document.getElementById('overview-result').innerHTML =
+      '<div class="card"><div class="empty">找不到 ' + data.teacherName + ' 的班級</div></div>';
+    return;
+  }
+
+  var totalAttAlerts = 0, totalScoreAlerts = 0;
+  data.classes.forEach(function(c) {
+    totalAttAlerts   += c.attendanceAlerts.length;
+    totalScoreAlerts += c.scoreAlerts.length;
+  });
+
+  var html = '';
+
+  // 頂部摘要
+  html += '<div class="card" style="background:#f8f9fa;margin-bottom:14px;">';
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">';
+  html += '<div style="flex:1;font-size:13px;font-weight:700;color:#274e13;">' + data.teacherName + ' 老師　共 ' + data.classes.length + ' 個班級</div>';
+  html += '<div style="font-size:12px;color:#856404;">⚠️ 出勤警示 ' + totalAttAlerts + ' 人次</div>';
+  html += '<div style="font-size:12px;color:#c0392b;">📊 成績警示 ' + totalScoreAlerts + ' 筆（低於 ' + threshold + ' 分 / 缺考）</div>';
+  html += '</div></div>';
+
+  // 每個班的卡片
+  data.classes.forEach(function(cls) {
+    var hasAtt   = cls.attendanceAlerts.length > 0;
+    var hasScore = cls.scoreAlerts.length > 0;
+    var badgeClass = (hasAtt || hasScore) ? 'warn' : 'ok';
+    var badgeText  = (hasAtt || hasScore)
+      ? '⚠️ 需注意'
+      : '✅ 正常';
+
+    html += '<div class="class-card">';
+    html += '<div class="class-card-header">';
+    html += '<h4>' + cls.className + '</h4>';
+    html += '<span class="class-card-badge ' + badgeClass + '">' + badgeText + '</span>';
+    html += '</div>';
+    html += '<div class="class-card-body">';
+
+    // 出勤警示
+    html += '<div class="alert-section-title">⚠️ 未補課 / 缺作業</div>';
+    if (!hasAtt) {
+      html += '<div class="no-alert">✓ 無警示</div>';
+    } else {
+      cls.attendanceAlerts.forEach(function(a) {
+        html += '<div class="alert-row">';
+        html += '<div class="alert-name">' + a.name + '</div>';
+        html += '<div class="alert-detail">';
+        if (a.missingMakeup.length) {
+          html += '<span style="color:#856404;">未補課：' + a.missingMakeup.join(', ') + '</span>';
+        }
+        if (a.missingMakeup.length && a.missingHw.length) html += '　';
+        if (a.missingHw.length) {
+          html += '<span style="color:#c0392b;">缺作業：' + a.missingHw.join(', ') + '</span>';
+        }
+        html += '</div></div>';
+      });
+    }
+
+    // 成績警示
+    html += '<div class="alert-section-title">📊 成績低於 ' + threshold + ' 分 / 缺考</div>';
+    if (!hasScore) {
+      html += '<div class="no-alert">✓ 無警示</div>';
+    } else {
+      // 按學生分組
+      var byStudent = {};
+      cls.scoreAlerts.forEach(function(a) {
+        if (!byStudent[a.name]) byStudent[a.name] = [];
+        byStudent[a.name].push(a);
+      });
+      Object.keys(byStudent).forEach(function(name) {
+        html += '<div class="alert-row">';
+        html += '<div class="alert-name">' + name + '</div>';
+        html += '<div class="alert-detail">';
+        byStudent[name].forEach(function(a, i) {
+          if (i > 0) html += '　';
+          if (a.missing) {
+            html += a.exam + '：<span style="font-weight:700;color:#7d3c98;">缺考</span>';
+          } else {
+            var scoreColor = a.score < 60 ? '#c0392b' : '#ca6f1e';
+            html += a.exam + '：<span style="font-weight:700;color:' + scoreColor + ';">' + a.score + '</span>';
+          }
+        });
+        html += '</div></div>';
+      });
+    }
+
+    html += '</div></div>'; // class-card-body + class-card
+  });
+
+  document.getElementById('overview-result').innerHTML = html;
+}
+
 </script>
 </body>
 </html>
