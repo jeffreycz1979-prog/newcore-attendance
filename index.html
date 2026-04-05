@@ -1388,12 +1388,27 @@ function openWheel(studentIdx, mode, lessonIdx) {
   highlightCenter(initVal);
   setTimeout(function(){document.getElementById('wheel-scroll').scrollTop=initVal*ITEM_HEIGHT;},50);
 }
-function closeWheel(){ document.getElementById('wheel-overlay').style.display='none'; wheelContext=null; wheelStudentIdx=-1; }
+function closeWheel(){
+  document.getElementById('wheel-overlay').style.display='none';
+  // 若是考試模式關閉，還原成 0-100 轉盤
+  if (wheelContext && wheelContext.mode === 'exam') buildWheel();
+  wheelContext=null; wheelStudentIdx=-1;
+}
 function wheelOverlayClick(e){ if(e.target===document.getElementById('wheel-overlay')) closeWheel(); }
 
 function confirmScore() {
   if(!wheelContext||wheelValue===null) return;
   var ctx=wheelContext;
+  if(ctx.mode==='exam'){
+    // 考試成績轉盤確認
+    var input = ctx.input;
+    var idx   = ctx.examIdx;
+    input.value = wheelValue;
+    onScoreInput(input);
+    closeWheel();
+    buildWheel(); // 還原成 0-100 轉盤
+    return;
+  }
   if(ctx.mode==='attend'){
     var st=classData.students[ctx.studentIdx];
     writeOne(ctx.studentIdx,null,String(wheelValue));
@@ -2183,7 +2198,8 @@ function renderExamTable() {
     html += 'oninput="onScoreInput(this)" ';
     html += 'onkeydown="onScoreKeydown(event,'+i+')">';
     html += '</td>';
-    html += '<td style="text-align:center;">';
+    html += '<td style="text-align:center;display:flex;gap:4px;align-items:center;justify-content:center;">';
+    html += '<button onclick="openExamWheel('+i+')" style="background:#274e13;border:none;cursor:pointer;font-size:13px;color:white;border-radius:6px;padding:4px 8px;" title="轉盤輸入">⚙</button>';
     html += '<button onclick="clearExamScore('+i+')" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;" title="清除">✕</button>';
     html += '</td>';
     html += '</tr>';
@@ -2250,6 +2266,52 @@ function updateExamStats() {
     '已填 <span style="color:#274e13">' + filled + '</span> / ' + total + ' 人　' +
     '平均 <span style="color:#1a5276">' + avg + '</span> 分　' +
     '<span style="color:#999">（Tab 鍵跳下一格）</span>';
+}
+
+function openExamWheel(idx) {
+  var inputs = document.querySelectorAll('.score-input');
+  var input  = inputs[idx];
+  if (!input) return;
+  var st = examData.students[idx];
+  var name = st.eName && st.cName
+    ? st.eName + '　' + st.cName
+    : (st.eName || st.cName);
+  var exam = examData.exams[currentExamIdx];
+  var initVal = input.value !== '' ? parseInt(input.value) : 80;
+  if (isNaN(initVal) || initVal < 0) initVal = 80;
+  if (initVal > 110) initVal = 110;
+
+  // 用現有轉盤，但暫時切換到考試模式
+  wheelContext = { mode: 'exam', examIdx: idx, input: input };
+  document.getElementById('wheel-student-name').textContent = name + '　' + exam.label;
+  document.getElementById('wheel-score-display').textContent = initVal;
+  document.getElementById('wheel-overlay').style.display = 'flex';
+
+  // 重建轉盤 0-110
+  buildExamWheel();
+  wheelValue = initVal;
+  highlightCenter(initVal);
+  setTimeout(function(){ document.getElementById('wheel-scroll').scrollTop = initVal * ITEM_HEIGHT; }, 50);
+}
+
+function buildExamWheel() {
+  var scroll = document.getElementById('wheel-scroll');
+  var html = '<div class="wheel-item" style="height:64px;"></div><div class="wheel-item" style="height:64px;"></div>';
+  for (var i = 0; i <= 110; i++) html += '<div class="wheel-item" data-val="' + i + '" onclick="wheelTap(' + i + ')">' + i + '</div>';
+  html += '<div class="wheel-item" style="height:64px;"></div><div class="wheel-item" style="height:64px;"></div>';
+  scroll.innerHTML = html;
+  // 快捷按鈕（考試用）
+  var quick = document.getElementById('wheel-quick');
+  var qHtml = '';
+  QUICK_SCORES.forEach(function(q){ qHtml += '<button class="quick-btn" onclick="wheelTap(' + q + ')">' + q + '</button>'; });
+  quick.innerHTML = qHtml;
+  scroll.onscroll = function() {
+    var idx = Math.round(scroll.scrollTop / ITEM_HEIGHT);
+    idx = Math.max(0, Math.min(110, idx));
+    wheelValue = idx;
+    document.getElementById('wheel-score-display').textContent = idx;
+    highlightCenter(idx);
+  };
 }
 
 function saveExamScores() {
