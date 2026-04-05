@@ -590,6 +590,7 @@
           <span style="font-size:11px;color:#888;">分</span>
         </div>
         <button class="rpt-btn" onclick="loadOverview()">🔍 查詢</button>
+        <button class="rpt-btn secondary" onclick="clearServerCache()" title="授權紀錄或班級有變動時使用">🗑 清除快取</button>
       </div>
     </div>
     <div id="overview-result"><div class="empty">請選擇老師後按查詢</div></div>
@@ -2393,6 +2394,14 @@ function loadOverview() {
       return;
     }
     renderOverview(data, threshold);
+  });
+}
+
+function clearServerCache() {
+  if (!confirm('確定要清除伺服器快取嗎？\n（授權紀錄或班級名單有變動時使用）')) return;
+  jsonpCall({ action: 'clearCache', authCode: AUTH_CODE }, function(err, r) {
+    if (r && r.ok) showToast('✅ ' + r.msg);
+    else showToast('❌ 清除失敗：' + (r && r.msg || ''));
   });
 }
 
