@@ -1353,32 +1353,59 @@ function setFilter(f) {
 
 function updateSummaryCell(studentIdx, lessonIdx) {
   if (!summaryData) return;
-  var st  = summaryData.students[studentIdx];
+  var st = summaryData.students[studentIdx];
   var rec = st.lessonRecords[lessonIdx];
   var cellId = 'scell-' + studentIdx + '-' + lessonIdx;
   var td = document.getElementById(cellId);
+  
   if (!td) { renderSummaryTable(); return; }
-  var attCls     = ATT_CLASS[rec.att] || '';
+
+  // 1. 狀態判定
   var needMakeup = (rec.att === '○' || rec.att === '△');
   var needHw     = (rec.att !== '' && rec.att !== '●' && rec.att !== '▲' && rec.score === '');
-  td.className   = needMakeup ? 'missing-makeup' : (needHw ? 'missing-hw' : '');
-  var attDisplay = rec.att
-    ? '<span class="' + attCls + '">' + rec.att + '</span>'
-    : '<span style="color:#ddd">·</span>';
-  var hasScore     = (rec.score !== '');
-  var scoreDisplay = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
+  
+  // 清除舊 Class 並加入新狀態
+  td.className = ''; // 先清空
+  if (needMakeup) td.classList.add('missing-makeup');
+  if (needHw) td.classList.add('missing-hw');
+
+  // 2. 清空儲存格準備重新填入
+  td.innerHTML = '';
+
+  // 3. 建立出席元件 (上層)
   var attEl = document.createElement('span');
-  attEl.className = 'cell-att'; attEl.title = '點擊修改出席';
-  attEl.innerHTML = attDisplay;
-  attEl.onclick = (function(si, li){ return function(e){ openAttPopup(e, si, li); }; })(studentIdx, lessonIdx);
+  attEl.className = 'cell-att';
+  // 【重要】直接設定屬性，不要寫在 innerHTML 字串裡，防止符號外漏
+  attEl.title = '點擊修改出席'; 
+  
+  var attCls = ATT_CLASS[rec.att] || '';
+  if (rec.att) {
+    attEl.innerHTML = '<span class="' + attCls + '">' + rec.att + '</span>';
+  } else {
+    attEl.innerHTML = '<span style="color:#ddd">·</span>';
+  }
+
+  attEl.onclick = function(e) {
+    e.stopPropagation();
+    openAttPopup(e, studentIdx, lessonIdx);
+  };
+
+  // 4. 建立分數元件 (下層)
   var scoreEl = document.createElement('span');
+  var hasScore = (rec.score !== '');
   scoreEl.className = 'cell-score' + (hasScore ? ' has-score' : '');
   scoreEl.title = '點擊修改分數';
-  scoreEl.innerHTML = scoreDisplay;
-  scoreEl.onclick = (function(si, li){ return function(){ openWheel(si, 'summary', li); }; })(studentIdx, lessonIdx);
-  var br = document.createElement('br');
-  td.innerHTML = '';
-  td.appendChild(attEl); td.appendChild(br); td.appendChild(scoreEl);
+  scoreEl.innerHTML = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
+
+  scoreEl.onclick = function(e) {
+    e.stopPropagation();
+    openWheel(studentIdx, 'summary', lessonIdx);
+  };
+
+  // 5. 組裝
+  td.appendChild(attEl);
+  td.appendChild(document.createElement('br'));
+  td.appendChild(scoreEl);
 }
 
 function renderSummaryTable() {
