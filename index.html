@@ -364,17 +364,17 @@
     <div class="login-sub">補習班管理系統</div>
 
     <div class="login-field">
-      <label>補習班 Sheet ID</label>
-      <input type="text" id="login-sheet-id" placeholder="貼上您的 Google Sheet ID"
-             onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div class="login-field">
       <label>授權碼</label>
       <input type="password" id="login-code" placeholder="請輸入授權碼"
              onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">登入</button>
     <div class="login-err" id="login-err"></div>
+
+    <div class="login-api">
+      <label>GAS API 網址（首次使用需填入）</label>
+      <input type="text" id="login-api-url" placeholder="https://script.google.com/macros/s/...">
+    </div>
   </div>
 </div>
 
@@ -629,13 +629,9 @@
 // ══════════════════════════════════════════════
 // 全域變數
 // ══════════════════════════════════════════════
-// ── 固定網址（不需老師填寫）──
-var API_URL   = 'https://script.google.com/macros/s/AKfycbzL4d3rUQyqXyqIVNBvK-Jx1Bxtg3Va7yDSECUCu_UEaKNKvDn_fIooIPH_QTJo71Ev/exec';
-var BRAIN_URL = 'https://script.google.com/macros/s/BRAIN_GAS_URL_HERE/exec'; // ← 授權中心 GAS 部署後填入
-
-var AUTH_CODE  = localStorage.getItem('nc_auth_code') || '';
-var SHEET_ID   = localStorage.getItem('nc_sheet_id')  || '';
-var currentUser = null; // { name, role, myClasses }
+var API_URL       = localStorage.getItem('nc_api_url') || '';
+var AUTH_CODE     = localStorage.getItem('nc_auth_code') || '';
+var currentUser   = null; // { name, role, myClasses }
 
 var classData     = null;
 var summaryData   = null;
@@ -675,15 +671,13 @@ var SYM_COLOR = {'V':'#1e7e34','\u25cb':'#c0392b','\u25cf':'#ca6f1e','\u25b3':'#
 var ATT_CLASS = {'V':'att-V','\u25cb':'att-o','\u25cf':'att-ob','\u25b3':'att-d','\u25b2':'att-db','\u229d':'att-l'};
 
 // ══════════════════════════════════════════════
-// JSONP（自動帶入 sheetId）
+// JSONP
 // ══════════════════════════════════════════════
 function jsonpCall(params, callback) {
   var cbName = '__ncCb' + (cbCounter++);
-  // 自動帶入 sheetId（所有 API 呼叫都需要）
-  var fullParams = Object.assign({ sheetId: SHEET_ID }, params);
   var url = API_URL + '?callback=' + cbName;
-  Object.keys(fullParams).forEach(function(k) {
-    url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(fullParams[k] === null ? '' : fullParams[k]);
+  Object.keys(params).forEach(function(k) {
+    url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k] === null ? '' : params[k]);
   });
   window[cbName] = function(data) {
     delete window[cbName];
@@ -704,13 +698,13 @@ function jsonpCall(params, callback) {
 // 登入 / 登出
 // ══════════════════════════════════════════════
 window.addEventListener('load', function() {
-  // 嘗試自動登入（若有儲存的 sheetId + 授權碼）
-  if (SHEET_ID && AUTH_CODE) {
+  // 填入已儲存的 API URL
+  if (API_URL) document.getElementById('login-api-url').value = API_URL;
+
+  // 嘗試自動登入（若有儲存的授權碼）
+  if (API_URL && AUTH_CODE) {
     autoLogin();
   }
-
-  // 填入已儲存的 Sheet ID
-  if (SHEET_ID) document.getElementById('login-sheet-id').value = SHEET_ID;
 
   document.addEventListener('click', function(e) {
     if (!document.getElementById('att-popup').contains(e.target) &&
@@ -722,93 +716,51 @@ window.addEventListener('load', function() {
 function autoLogin() {
   document.getElementById('login-btn').disabled = true;
   document.getElementById('login-err').textContent = '自動登入中...';
-  // 先驗證授權中心，確認 sheetId 有效
-  checkLicense(SHEET_ID, function(licErr, licData) {
-    if (licErr || !licData || !licData.valid) {
-      localStorage.removeItem('nc_sheet_id');
+  jsonpCall({ action: 'verifyAuth', authCode: AUTH_CODE }, function(err, data) {
+    document.getElementById('login-btn').disabled = false;
+    if (err || !data || !data.ok) {
+      // 自動登入失敗，清掉舊 token，等待手動登入
       localStorage.removeItem('nc_auth_code');
-      SHEET_ID = ''; AUTH_CODE = '';
-      document.getElementById('login-btn').disabled = false;
+      AUTH_CODE = '';
       document.getElementById('login-err').textContent = '';
       return;
     }
-    // 再驗證授權碼
-    jsonpCall({ action: 'verifyAuth', authCode: AUTH_CODE }, function(err, data) {
-      document.getElementById('login-btn').disabled = false;
-      if (err || !data || !data.ok) {
-        localStorage.removeItem('nc_auth_code');
-        AUTH_CODE = '';
-        document.getElementById('login-err').textContent = '';
-        return;
-      }
-      onLoginSuccess(data, licData);
-    });
+    onLoginSuccess(data);
   });
 }
 
 function doLogin() {
-  var sheetId = document.getElementById('login-sheet-id').value.trim();
-  var code    = document.getElementById('login-code').value.trim();
+  var apiUrl = document.getElementById('login-api-url').value.trim();
+  var code   = document.getElementById('login-code').value.trim();
 
-  if (!sheetId) { document.getElementById('login-err').textContent = '請填入補習班 Sheet ID'; return; }
+  if (apiUrl) {
+    API_URL = apiUrl;
+    localStorage.setItem('nc_api_url', apiUrl);
+  }
+  if (!API_URL) { document.getElementById('login-err').textContent = '請填入 GAS API 網址'; return; }
   if (!code)    { document.getElementById('login-err').textContent = '請輸入授權碼'; return; }
 
   var btn = document.getElementById('login-btn');
   btn.textContent = '驗證中...'; btn.disabled = true;
   document.getElementById('login-err').textContent = '';
 
-  // 第一步：打授權中心驗證 Sheet ID
-  checkLicense(sheetId, function(licErr, licData) {
-    if (licErr) {
-      btn.textContent = '登入'; btn.disabled = false;
-      document.getElementById('login-err').textContent = '❌ 授權中心連線失敗';
-      return;
-    }
-    if (!licData || !licData.valid) {
-      btn.textContent = '登入'; btn.disabled = false;
-      document.getElementById('login-err').textContent = '❌ ' + (licData && licData.message || '授權無效，請聯繫 Jeffrey 老師');
-      return;
-    }
-
-    // 第二步：儲存 sheetId，驗證授權碼
-    SHEET_ID = sheetId;
-    localStorage.setItem('nc_sheet_id', sheetId);
-
-    jsonpCall({ action: 'verifyAuth', authCode: code }, function(err, data) {
-      btn.textContent = '登入'; btn.disabled = false;
-      if (err) { document.getElementById('login-err').textContent = '❌ 連線失敗，請稍後再試'; return; }
-      if (!data || !data.ok) { document.getElementById('login-err').textContent = '❌ ' + (data && data.msg || '授權碼無效'); return; }
-      AUTH_CODE = code;
-      localStorage.setItem('nc_auth_code', code);
-      onLoginSuccess(data, licData);
-    });
+  jsonpCall({ action: 'verifyAuth', authCode: code }, function(err, data) {
+    btn.textContent = '登入'; btn.disabled = false;
+    if (err) { document.getElementById('login-err').textContent = '❌ 連線失敗，請確認 API 網址'; return; }
+    if (!data || !data.ok) { document.getElementById('login-err').textContent = '❌ ' + (data && data.msg || '授權碼無效'); return; }
+    AUTH_CODE = code;
+    localStorage.setItem('nc_auth_code', code);
+    onLoginSuccess(data);
   });
 }
 
-/** 打授權中心驗證 sheetId **/
-function checkLicense(sheetId, callback) {
-  fetch(BRAIN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'checkLicense', sheetId: sheetId })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){ callback(null, data); })
-  .catch(function(err){ callback(err); });
-}
-
-function onLoginSuccess(data, licData) {
+function onLoginSuccess(data) {
   currentUser = data;
   // 更新 auth bar
   document.getElementById('auth-name-display').textContent = data.name;
   var roleEl = document.getElementById('auth-role-display');
   roleEl.textContent = data.role === 'admin' ? '管理員' : '老師';
   roleEl.className = 'auth-role' + (data.role === 'admin' ? ' admin' : '');
-
-  // 顯示寬限期警告
-  if (licData && licData.isGrace) {
-    showToast('⚠️ ' + licData.message);
-  }
 
   // 切換到主畫面
   document.getElementById('login-screen').style.display = 'none';
@@ -827,6 +779,7 @@ function onLoginSuccess(data, licData) {
       populateAllClassSelects([]);
       return;
     }
+    // admin 的 myClasses 為 null，改呼叫 getClassList 取全部
     if (data.role === 'admin' || !data.myClasses) {
       jsonpCall({ action: 'getClassList' }, function(err2, list) {
         populateAllClassSelects((!err2 && list && !list.error) ? list : []);
@@ -841,14 +794,12 @@ function onLoginSuccess(data, licData) {
 function doLogout() {
   currentUser = null;
   AUTH_CODE   = '';
-  SHEET_ID    = '';
   localStorage.removeItem('nc_auth_code');
-  localStorage.removeItem('nc_sheet_id');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('main-screen').style.display  = 'none';
-  document.getElementById('login-code').value     = '';
-  document.getElementById('login-sheet-id').value = '';
+  document.getElementById('login-code').value = '';
   document.getElementById('login-err').textContent = '';
+  // 重設所有選單
   classData = summaryData = null;
 }
 
@@ -1800,7 +1751,6 @@ function sendReportEmail() {
     body: JSON.stringify({
       action:      'sendReportEmail',
       authCode:    AUTH_CODE,
-      sheetId:     SHEET_ID,
       toEmail:     email,
       studentName: d.eName || d.cName,
       className:   d.className,
@@ -2383,7 +2333,6 @@ function saveExamScores() {
     body: JSON.stringify({
       action:    'saveExamScores',
       authCode:  AUTH_CODE,
-      sheetId:   SHEET_ID,
       className: examData.className,
       colIdx:    exam.colIdx,
       scores:    scores
