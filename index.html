@@ -847,8 +847,32 @@ function loadGeminiKey() {
 // ══════════════════════════════════════════════
 // 【修正1】Gemini 語音辨識 — 加強分數驗證
 // ══════════════════════════════════════════════
-function callGemini(base64, mimeType, studentList, callback) {
-  var prompt =
+/**
+ * 定義模型優先順序
+ * 建議：點名任務其實用 lite 版就非常準確且更穩定。
+ */
+const MODEL_PRIORITY = [
+  'gemini-2.5-flash',      // 第一優先：最強大腦
+  'gemini-2.5-flash-lite', // 第二優先：極速、省點數、高可用性
+  'gemini-2.0-flash'       // 第三優先：穩定的老兵備援
+];
+
+/**
+ * 核心辨識函式
+ * @param {string} base64 - 錄音檔的 base64 字串
+ * @param {string} mimeType - 錄音檔格式 (如 audio/webm)
+ * @param {string} studentList - 學生名單字串
+ * @param {function} callback - 回傳結果的 callback
+ * @param {number} attempt - 目前嘗試的次數 (預設為 0)
+ */
+function callGemini(base64, mimeType, studentList, callback, attempt = 0) {
+  // 1. 根據 attempt 決定目前使用的模型
+  const currentModel = MODEL_PRIORITY[attempt] || MODEL_PRIORITY[0];
+  
+  // 2. 動態生成 API URL (請確保你的 API_KEY 變數已定義)
+  const dynamicUrl = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${API_KEY}`;
+
+  const prompt =
     '你是點名助手。學生名單：[ ' + studentList + ' ]。\n' +
     '請聽錄音，辨識老師說了哪些學生的出席狀況或分數。\n' +
     '輸出純 JSON 陣列（不要加 markdown），格式：\n' +
@@ -860,39 +884,83 @@ function callGemini(base64, mimeType, studentList, callback) {
     '  - 不要因為環境噪音或語音不清楚就填入奇怪的數字。\n' +
     '只輸出 JSON，不要其他文字。';
 
-  var payload = {
+  const payload = {
     contents: [{ parts: [
       { text: prompt },
       { inline_data: { mime_type: mimeType, data: base64 } }
     ]}],
-    generationConfig: {}
+    generationConfig: {
+      temperature: 0.2, // 降低隨機性，讓點名更精準
+      topP: 0.8
+    }
   };
 
-  fetch(GEMINI_URL, {
+  fetch(dynamicUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if (!data.candidates || !data.candidates[0]) {
-      var reason = (data.promptFeedback && data.promptFeedback.blockReason) || JSON.stringify(data);
-      throw new Error('Gemini 無回應：' + reason);
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    // --- 核心改動：處理 503 塞車或 429 頻率過高 ---
+    if (data.error) {
+      const code = data.error.code;
+      const msg = data.error.message;
+      
+      // 如果還有下一個模型可以嘗試 (503 = 伺服器忙碌)
+      if ((code === 503 || code === 429) && attempt < MODEL_PRIORITY.length - 1) {
+        console.warn(`⚠️ ${currentModel} 忙碌 (${code})，5秒後嘗試切換至 ${MODEL_PRIORITY[attempt+1]}...`);
+        showToast(`系統忙碌，正在切換線路...`);
+        
+        // 延遲一小段時間再重試，避免連續撞牆
+        setTimeout(function() {
+          callGemini(base64, mimeType, studentList, callback, attempt + 1);
+        }, 1500);
+        return;
+      }
+      throw new Error(`Gemini 報錯 (${code}): ${msg}`);
     }
-    var text = data.candidates[0].content.parts[0].text;
-    var cleaned = text.trim();
-    if (cleaned.indexOf('```') !== -1) { cleaned = cleaned.replace(/```json/g,'').replace(/```/g,'').trim(); }
-    var updates = JSON.parse(cleaned);
-    callback(null, updates);
+
+    if (!data.candidates || !data.candidates[0]) {
+      throw new Error('Gemini 無回應，請稍後再試');
+    }
+
+    // 3. 解析與清理 JSON
+    let text = data.candidates[0].content.parts[0].text;
+    let cleaned = text.trim();
+    
+    // 清除 Markdown 標籤
+    if (cleaned.includes('```')) {
+      cleaned = cleaned.replace(/```json/g, '').replace(/```/g, '').trim();
+    }
+
+    try {
+      const updates = JSON.parse(cleaned);
+      console.log(`✅ 使用模型 ${currentModel} 辨識成功`);
+      callback(null, updates);
+    } catch (e) {
+      throw new Error('JSON 解析失敗：' + cleaned);
+    }
   })
-  .catch(function(err){ callback(err); });
+  .catch(function(err) {
+    console.error('Gemini 呼叫失敗:', err);
+    callback(err);
+  });
 }
 
 function showToast(msg) {
-  var t = document.createElement('div');
-  t.className = 'save-toast'; t.textContent = msg;
+  const t = document.createElement('div');
+  t.className = 'save-toast';
+  t.textContent = msg;
+  // 簡單美化
+  Object.assign(t.style, {
+    position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+    backgroundColor: '#333', color: '#fff', padding: '10px 20px', borderRadius: '5px', zIndex: '9999'
+  });
   document.body.appendChild(t);
-  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 2000);
+  setTimeout(function() { 
+    if(t.parentNode) t.parentNode.removeChild(t); 
+  }, 3000);
 }
 
 // ══════════════════════════════════════════════
