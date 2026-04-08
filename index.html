@@ -2058,14 +2058,21 @@ function buildExamWheel() {
   scroll.onscroll=function(){var idx=Math.round(scroll.scrollTop/ITEM_HEIGHT);idx=Math.max(0,Math.min(110,idx));wheelValue=idx;document.getElementById('wheel-score-display').textContent=idx;highlightCenter(idx);};
 }
 
-function saveExamScores() {
-  if(!examData||currentExamIdx<0) return;
-  var exam=examData.exams[currentExamIdx],inputs=document.querySelectorAll('.score-input'),scores=[];
-  inputs.forEach(function(inp){scores.push({row:inp.dataset.row,score:inp.value.trim()});});
-  var btn=document.querySelector('#exam-score-card .rpt-btn');btn.textContent='⏳ 儲存中...';btn.disabled=true;
-  fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveExamScores',authCode:AUTH_CODE,className:examData.className,colIdx:exam.colIdx,scores:scores})})
-  .then(function(r){return r.json();}).then(function(result){btn.textContent='💾 儲存全部分數';btn.disabled=false;if(result&&result.ok){examData.exams[currentExamIdx].scores=scores.map(function(s){return s.score;});pendingChanges={};updateSaveInfo();showToast('✅ '+result.msg);}else showToast('❌ 儲存失敗：'+(result&&result.msg||(result&&result.error||'')));})
-  .catch(function(err){btn.textContent='💾 儲存全部分數';btn.disabled=false;showToast('❌ 儲存失敗：'+err.message);});
+  jsonpCall({
+    action: 'saveExamScores',
+    authCode: AUTH_CODE,
+    className: examData.className,
+    colIdx: exam.colIdx,
+    scores: JSON.stringify(scores)  // ← 注意：JSONP 只能傳字串
+  }, function(err, result) {
+    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
+    if (result && result.ok) {
+      examData.exams[currentExamIdx].scores = scores.map(function(s){return s.score;});
+      pendingChanges = {}; updateSaveInfo(); showToast('✅ ' + result.msg);
+    } else {
+      showToast('❌ 儲存失敗：' + (result && result.msg || ''));
+    }
+  });
 }
 
 // ══════════════════════════════════════════════
@@ -3720,7 +3727,7 @@ function renderSummaryTable(){
       var hasScore=rec.score!=='';
       var scoreDisplay=hasScore?rec.score:'<span style="color:#ccc">-</span>';
       html+='<td id="scell-'+origIdx+'-'+l+'" class="'+cellBg+'">';
-      html+='<span class="cell-att" onclick="openAttPopup(event,'+origIdx+','+l+')">\u9ede\u64ca\u4fee\u6539\u51fa\u5e2d">'+attDisplay+'</span>';
+      html+='<span class="cell-att" onclick="openAttPopup(event,'+origIdx+','+l+')">'+attDisplay+'</span>';
       html+='<br><span class="cell-score'+(hasScore?' has-score':'')+'" onclick="openWheel('+origIdx+',\'summary\','+l+')" title="\u9ede\u64ca\u4fee\u6539\u5206\u6578">'+scoreDisplay+'</span>';
       html+='</td>';
     }
