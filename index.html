@@ -2059,23 +2059,6 @@ function buildExamWheel() {
   scroll.onscroll=function(){var idx=Math.round(scroll.scrollTop/ITEM_HEIGHT);idx=Math.max(0,Math.min(110,idx));wheelValue=idx;document.getElementById('wheel-score-display').textContent=idx;highlightCenter(idx);};
 }
 
-  jsonpCall({
-    action: 'saveExamScores',
-    authCode: AUTH_CODE,
-    className: examData.className,
-    colIdx: exam.colIdx,
-    scores: JSON.stringify(scores)  // ← 注意：JSONP 只能傳字串
-  }, function(err, result) {
-    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
-    if (result && result.ok) {
-      examData.exams[currentExamIdx].scores = scores.map(function(s){return s.score;});
-      pendingChanges = {}; updateSaveInfo(); showToast('✅ ' + result.msg);
-    } else {
-      showToast('❌ 儲存失敗：' + (result && result.msg || ''));
-    }
-  });
-}
-
 // ══════════════════════════════════════════════
 // 總覽頁
 // ══════════════════════════════════════════════
@@ -3230,17 +3213,27 @@ function buildExamWheel(){
 }
 function saveExamScores(){
   if(!examData||currentExamIdx<0)return;
-  var exam=examData.exams[currentExamIdx],inputs=document.querySelectorAll('.score-input'),scores=[];
+  var exam=examData.exams[currentExamIdx];
+  var inputs=document.querySelectorAll('.score-input');
+  var scores=[];
   inputs.forEach(function(inp){scores.push({row:inp.dataset.row,score:inp.value.trim()});});
-  var btn=document.querySelector('#exam-score-card .rpt-btn');btn.textContent='\u23f3 \u5132\u5b58\u4e2d...';btn.disabled=true;
-  fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveExamScores',authCode:AUTH_CODE,className:examData.className,colIdx:exam.colIdx,scores:scores})})
-  .then(function(r){return r.json();})
-  .then(function(result){
-    btn.textContent='\ud83d\udcbe \u5132\u5b58\u5168\u90e8\u5206\u6578';btn.disabled=false;
-    if(result&&result.ok){examData.exams[currentExamIdx].scores=scores.map(function(s){return s.score;});pendingChanges={};updateSaveInfo();showToast('\u2705 '+result.msg);}
-    else showToast('\u274c \u5132\u5b58\u5931\u6557\uff1a'+(result&&result.msg||''));
-  })
-  .catch(function(err){btn.textContent='\ud83d\udcbe \u5132\u5b58\u5168\u90e8\u5206\u6578';btn.disabled=false;showToast('\u274c \u5132\u5b58\u5931\u6557\uff1a'+err.message);});
+  var btn=document.querySelector('#exam-score-card .rpt-btn');
+  btn.textContent='⏳ 儲存中...';btn.disabled=true;
+  jsonpCall({
+    action:'saveExamScores',
+    authCode:AUTH_CODE,
+    className:examData.className,
+    colIdx:exam.colIdx,
+    scores:JSON.stringify(scores)
+  },function(err,result){
+    btn.textContent='💾 儲存全部分數';btn.disabled=false;
+    if(result&&result.ok){
+      examData.exams[currentExamIdx].scores=scores.map(function(s){return s.score;});
+      pendingChanges={};updateSaveInfo();showToast('✅ '+result.msg);
+    }else{
+      showToast('❌ 儲存失敗：'+(result&&result.msg||''));
+    }
+  });
 }
 
 function initOverviewTab(){
