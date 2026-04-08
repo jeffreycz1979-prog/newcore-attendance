@@ -847,32 +847,23 @@ function loadGeminiKey() {
 // ══════════════════════════════════════════════
 // 【修正1】Gemini 語音辨識 — 加強分數驗證
 // ══════════════════════════════════════════════
-/**
- * 定義模型優先順序
- * 建議：點名任務其實用 lite 版就非常準確且更穩定。
- */
-const MODEL_PRIORITY = [
- 'gemini-2.5-flash-lite', // 第一優先：極速、省點數、高可用性 
- 'gemini-2.5-flash',      // 第二優先：最強大腦
- 'gemini-2.0-flash'       // 第三優先：穩定的老兵備援
-];
+// 1. 定義模型優先順序 (放在 callGemini 外部)
+var MODEL_PRIORITY = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
 
-/**
- * 核心辨識函式
- * @param {string} base64 - 錄音檔的 base64 字串
- * @param {string} mimeType - 錄音檔格式 (如 audio/webm)
- * @param {string} studentList - 學生名單字串
- * @param {function} callback - 回傳結果的 callback
- * @param {number} attempt - 目前嘗試的次數 (預設為 0)
- */
 function callGemini(base64, mimeType, studentList, callback, attempt = 0) {
-  // 1. 根據 attempt 決定目前使用的模型
-  const currentModel = MODEL_PRIORITY[attempt] || MODEL_PRIORITY[0];
-  
-  // 2. 動態生成 API URL (請確保你的 API_KEY 變數已定義)
-  const dynamicUrl = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${API_KEY}`;
+  // 檢查 API Key 是否已載入
+  if (!GEMINI_API_KEY) {
+    callback(new Error('Gemini API Key 尚未載入，請稍後再試'));
+    return;
+  }
 
-  const prompt =
+  // 2. 根據嘗試次數動態切換模型名稱
+  var currentModel = MODEL_PRIORITY[attempt] || MODEL_PRIORITY[0];
+  
+  // 3. 重新構建 URL (確保包含目前的 Key 和模型)
+  var dynamicUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + currentModel + ':generateContent?key=' + GEMINI_API_KEY;
+
+  var prompt =
     '你是點名助手。學生名單：[ ' + studentList + ' ]。\n' +
     '請聽錄音，辨識老師說了哪些學生的出席狀況或分數。\n' +
     '輸出純 JSON 陣列（不要加 markdown），格式：\n' +
@@ -881,86 +872,52 @@ function callGemini(base64, mimeType, studentList, callback, attempt = 0) {
     '【分數規則】分數必須是 0 到 200 之間的整數。\n' +
     '  - 若沒聽清楚分數，一律填空字串 ""，絕對不要猜測。\n' +
     '  - 若聽到的數字不像合理分數（如超過 200 或負數），填空字串。\n' +
-    '  - 不要因為環境噪音或語音不清楚就填入奇怪的數字。\n' +
     '只輸出 JSON，不要其他文字。';
 
-  const payload = {
+  var payload = {
     contents: [{ parts: [
       { text: prompt },
       { inline_data: { mime_type: mimeType, data: base64 } }
     ]}],
-    generationConfig: {
-      temperature: 0.2, // 降低隨機性，讓點名更精準
-      topP: 0.8
-    }
+    generationConfig: { temperature: 0.2 }
   };
 
-  fetch(dynamicUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+  fetch(dynamicUrl, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify(payload) 
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
-    // --- 核心改動：處理 503 塞車或 429 頻率過高 ---
+    // --- 關鍵：處理 503/429 並自動重試 ---
     if (data.error) {
-      const code = data.error.code;
-      const msg = data.error.message;
-      
-      // 如果還有下一個模型可以嘗試 (503 = 伺服器忙碌)
-      if ((code === 503 || code === 429) && attempt < MODEL_PRIORITY.length - 1) {
-        console.warn(`⚠️ ${currentModel} 忙碌 (${code})，5秒後嘗試切換至 ${MODEL_PRIORITY[attempt+1]}...`);
-        showToast(`系統忙碌，正在切換線路...`);
-        
-        // 延遲一小段時間再重試，避免連續撞牆
+      if ((data.error.code === 503 || data.error.code === 429) && attempt < MODEL_PRIORITY.length - 1) {
+        console.warn('⚠️ ' + currentModel + ' 忙碌，正在切換備援線路...');
+        showToast('系統忙碌，正在切換線路...');
+        // 遞迴重試
         setTimeout(function() {
           callGemini(base64, mimeType, studentList, callback, attempt + 1);
         }, 1500);
         return;
       }
-      throw new Error(`Gemini 報錯 (${code}): ${msg}`);
+      throw new Error('Gemini 錯誤: ' + data.error.message);
     }
 
     if (!data.candidates || !data.candidates[0]) {
-      throw new Error('Gemini 無回應，請稍後再試');
+      throw new Error('Gemini 無回應');
     }
 
-    // 3. 解析與清理 JSON
-    let text = data.candidates[0].content.parts[0].text;
-    let cleaned = text.trim();
+    var text = data.candidates[0].content.parts[0].text.trim();
+    if (text.indexOf('```') !== -1) { 
+      text = text.replace(/```json/g,'').replace(/```/g,'').trim(); 
+    }
     
-    // 清除 Markdown 標籤
-    if (cleaned.includes('```')) {
-      cleaned = cleaned.replace(/```json/g, '').replace(/```/g, '').trim();
-    }
-
-    try {
-      const updates = JSON.parse(cleaned);
-      console.log(`✅ 使用模型 ${currentModel} 辨識成功`);
-      callback(null, updates);
-    } catch (e) {
-      throw new Error('JSON 解析失敗：' + cleaned);
-    }
+    console.log('✅ 使用模型 ' + currentModel + ' 辨識成功');
+    callback(null, JSON.parse(text));
   })
-  .catch(function(err) {
-    console.error('Gemini 呼叫失敗:', err);
-    callback(err);
+  .catch(function(err) { 
+    callback(err); 
   });
-}
-
-function showToast(msg) {
-  const t = document.createElement('div');
-  t.className = 'save-toast';
-  t.textContent = msg;
-  // 簡單美化
-  Object.assign(t.style, {
-    position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
-    backgroundColor: '#333', color: '#fff', padding: '10px 20px', borderRadius: '5px', zIndex: '9999'
-  });
-  document.body.appendChild(t);
-  setTimeout(function() { 
-    if(t.parentNode) t.parentNode.removeChild(t); 
-  }, 3000);
 }
 
 // ══════════════════════════════════════════════
