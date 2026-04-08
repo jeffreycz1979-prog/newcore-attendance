@@ -2628,10 +2628,11 @@ function renderSummaryTable() {
       var cellBg = needMakeup?'missing-makeup':(needHw?'missing-hw':'');
       var attDisplay = rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">\u00b7</span>';
       var hasScore = rec.score !== '', scoreDisplay = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
-      html += '<td id="scell-'+origIdx+'-'+l+'" class="'+cellBg+'">';
-      html += '<span class="cell-att" onclick="openAttPopup(event,'+origIdx+','+l+')" title="\u9ede\u64ca\u4fee\u6539\u51fa\u5e2d">'+attDisplay+'</span>';
-      html += '<br><span class="cell-score'+(hasScore?' has-score':'')+'" onclick="openWheel('+origIdx+',\'summary\','+l+')" title="\u9ede\u64ca\u4fee\u6539\u5206\u6578">'+scoreDisplay+'</span></td>';
-    }
+     // 修正後的內容：移除 span 上的 title 屬性，減少標籤衝突
+      html+='<td id="scell-'+origIdx+'-'+l+'" class="'+cellBg+'">';
+      html+='<span class="cell-att" onclick="openAttPopup(event,'+origIdx+','+l+')">'+attDisplay+'</span>';
+      html+='<br><span class="cell-score'+(hasScore?' has-score':'')+'" onclick="openWheel('+origIdx+',\'summary\','+l+')">'+scoreDisplay+'</span>';
+      html+='</td>';
     for (var s = 0; s < statsH.length; s++) html += '<td class="stats-val">'+(st.statsValues[s]||'')+'</td>';
     var mkCls = st.missingMakeup.length?'alert-count has-issue':'alert-count';
     var hwCls = st.missingHw.length?'alert-count has-issue':'alert-count';
@@ -3653,22 +3654,32 @@ function setFilter(f){
   if(summaryData)renderSummaryTable();
 }
 
-function updateSummaryCell(studentIdx,lessonIdx){
-  if(!summaryData)return;
-  var st=summaryData.students[studentIdx];var rec=st.lessonRecords[lessonIdx];
-  var td=document.getElementById('scell-'+studentIdx+'-'+lessonIdx);
-  if(!td){renderSummaryTable();return;}
-  var attCls=ATT_CLASS[rec.att]||'';
-  var needMakeup=(rec.att==='\u25cb'||rec.att==='\u25b3');
-  var needHw=(rec.att!==''&&rec.att!=='\u25cf'&&rec.att!=='\u25b2'&&rec.score==='');
-  td.className=needMakeup?'missing-makeup':(needHw?'missing-hw':'');
-  var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">\u00b7</span>';
-  var hasScore=(rec.score!=='');var scoreDisplay=hasScore?rec.score:'<span style="color:#ccc">-</span>';
-  var attEl=document.createElement('span');attEl.className='cell-att';attEl.title='\u9ede\u64ca\u4fee\u6539\u51fa\u5e2d';attEl.innerHTML=attDisplay;
-  attEl.onclick=(function(si,li){return function(e){openAttPopup(e,si,li);};})(studentIdx,lessonIdx);
-  var scoreEl=document.createElement('span');scoreEl.className='cell-score'+(hasScore?' has-score':'');scoreEl.title='\u9ede\u64ca\u4fee\u6539\u5206\u6578';scoreEl.innerHTML=scoreDisplay;
-  scoreEl.onclick=(function(si,li){return function(){openWheel(si,'summary',li);};})(studentIdx,lessonIdx);
-  td.innerHTML='';td.appendChild(attEl);td.appendChild(document.createElement('br'));td.appendChild(scoreEl);
+function updateSummaryCell(studentIdx, lessonIdx) {
+  if (!summaryData) return;
+  var st = summaryData.students[studentIdx];
+  var rec = st.lessonRecords[lessonIdx];
+  var cellId = 'scell-' + studentIdx + '-' + lessonIdx;
+  var td = document.getElementById(cellId);
+  if (!td) { renderSummaryTable(); return; }
+
+  // 1. 狀態判定
+  var needMakeup = (rec.att === '○' || rec.att === '△');
+  var needHw = (rec.att !== '' && rec.att !== '●' && rec.att !== '▲' && rec.score === '' && (rec.att === 'V' || rec.att === '⊝' || rec.att === ''));
+
+  // 2. 更新 Class
+  td.className = needMakeup ? 'missing-makeup' : (needHw ? 'missing-hw' : '');
+
+  // 3. 準備顯示內容
+  var attCls = ATT_CLASS[rec.att] || '';
+  var attDisplay = rec.att ? '<span class="' + attCls + '">' + rec.att + '</span>' : '<span style="color:#ddd">·</span>';
+  var hasScore = (rec.score !== '');
+  var scoreDisplay = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
+
+  // 4. 重繪內部 HTML (確保 onclick 依然有效)
+  td.innerHTML = 
+    '<span class="cell-att" onclick="openAttPopup(event,' + studentIdx + ',' + lessonIdx + ')">' + attDisplay + '</span>' +
+    '<br>' +
+    '<span class="cell-score' + (hasScore ? ' has-score' : '') + '" onclick="openWheel(' + studentIdx + ',\'summary\',' + lessonIdx + ')">' + scoreDisplay + '</span>';
 }
 
 function renderSummaryTable(){
