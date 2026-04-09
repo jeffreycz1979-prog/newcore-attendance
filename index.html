@@ -455,6 +455,7 @@
       <div class="card"><label>辨識紀錄</label><div id="log"></div></div>
     </div>
   </div>
+  </div><!-- /.page#page-attend  ← 修正：補上正確的關閉標籤 -->
 
   <!-- ══ 總表頁 ══ -->
   <div class="page" id="page-summary">
@@ -462,10 +463,10 @@
       <div class="summary-toolbar">
         <div style="flex:1;min-width:150px;">
           <label>選擇班級</label>
-          <select id="sum-class-sel"><option value="">請先選班級...</option></select>
-            <select id="sum-class-sel" onchange="onSumClassChange()">
-               <option value="">請先選班級...</option>
-            </select>
+          <!-- ✅ 修正：移除重複的 sum-class-sel，只保留有 onchange 的這個 -->
+          <select id="sum-class-sel" onchange="onSumClassChange()">
+            <option value="">請先選班級...</option>
+          </select>
         </div>
         <div style="display:flex;gap:6px;padding-bottom:1px;">
           <button class="filter-btn active" id="filter-all"    onclick="setFilter('all')">全部</button>
@@ -515,12 +516,12 @@
       <div class="card" style="padding:12px 16px;">
         <label>選擇考試</label>
         <div class="exam-tab-row" id="exam-tab-row"></div>
-     <div style="display:flex; align-items:center; gap:8px; margin-top:12px; border-top:1px solid #f0f0f0; padding-top:12px;">
-      <button class="mic-btn" id="exam-mic-btn" onclick="toggleExamMic()" style="flex:1; padding:10px; font-size:14px;">🎤 語音輸入成績</button>
-      <div class="rec-timer" id="exam-rec-timer" style="display:none;">0s</div>
-    </div>
-    <div id="exam-status-bar" class="status-bar" style="display:none; margin-top:8px; font-size:11px;"></div>
-  </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:12px; border-top:1px solid #f0f0f0; padding-top:12px;">
+          <button class="mic-btn" id="exam-mic-btn" onclick="toggleExamMic()" style="flex:1; padding:10px; font-size:14px;">🎤 語音輸入成績</button>
+          <div class="rec-timer" id="exam-rec-timer" style="display:none;">0s</div>
+        </div>
+        <div id="exam-status-bar" class="status-bar" style="display:none; margin-top:8px; font-size:11px;"></div>
+      </div>
       <div class="card" style="padding:10px 0;" id="exam-score-card">
         <div style="padding:0 16px 8px;">
           <div class="exam-stats" id="exam-stats"></div>
@@ -647,10 +648,11 @@
 // ══════════════════════════════════════════════
 var API_URL       = localStorage.getItem('nc_api_url') || '';
 var AUTH_CODE     = localStorage.getItem('nc_auth_code') || '';
-var currentUser   = null; // { name, role, myClasses }
+var currentUser   = null;
 
 var classData     = null;
 var summaryData   = null;
+var summaryStructure = null;
 var availDates    = [];
 var lastMatchIdx  = -1;
 var cbCounter     = 0;
@@ -658,15 +660,74 @@ var currentFilter = 'all';
 
 var GEMINI_API_KEY = '';
 var GEMINI_URL     = '';
+
+// ══════════════════════════════════════════════
+// Gemini 模型設定（主力 + 備援）
+// ══════════════════════════════════════════════
+// 主力：gemini-2.5-flash（穩定版，平衡效能與速度）
+// 備援：gemini-2.5-flash-lite（穩定版，高流量低延遲，2026/02 GA）
+var GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
 function updateGeminiUrl() {
-  // 優先順序：3.1 Flash-Lite (最快、配額最寬鬆)
-  // 次選：2.5 Flash-Lite (備援穩定版)
-  const primaryModel = "gemini-3.1-flash-lite-preview"; 
-  
-  // 設定 URL，讓系統直接調用最強的 Lite 模型
-  GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + primaryModel + ':generateContent?key=' + GEMINI_API_KEY;
-  
-  console.log("Gemini Engine Switched to: " + primaryModel);
+  GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODELS[0] + ':generateContent?key=' + GEMINI_API_KEY;
+  console.log('Gemini ready. 主力：' + GEMINI_MODELS[0] + '，備援：' + GEMINI_MODELS[1]);
+}
+
+/**
+ * 統一 Gemini 呼叫介面，含自動備援與指數退避重試
+ * parts: Gemini contents parts 陣列（含 text + inline_data）
+ * callback: function(err, parsedJson)
+ */
+function callGeminiWithFallback(parts, callback, retryCount) {
+  retryCount = retryCount || 0;
+  var model = GEMINI_MODELS[retryCount % GEMINI_MODELS.length];
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + GEMINI_API_KEY;
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: parts }],
+      generationConfig: {
+        response_mime_type: 'application/json',
+        temperature: 0.1
+      }
+    })
+  })
+  .then(function(r) {
+    if (r.status === 503 && retryCount < 3) {
+      var delay = Math.pow(2, retryCount) * 800;
+      console.warn('⚠️ ' + model + ' 忙碌（503），' + delay + 'ms 後切換備援...');
+      setTimeout(function() { callGeminiWithFallback(parts, callback, retryCount + 1); }, delay);
+      return null;
+    }
+    return r.json();
+  })
+  .then(function(data) {
+    if (!data) return;
+    if (data.error) {
+      if (retryCount < 3) {
+        console.warn('⚠️ ' + model + ' 錯誤，切換備援...');
+        setTimeout(function() { callGeminiWithFallback(parts, callback, retryCount + 1); }, 800);
+        return;
+      }
+      throw new Error(data.error.message);
+    }
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      var reason = (data.promptFeedback && data.promptFeedback.blockReason) || '無回應';
+      throw new Error('Gemini ' + model + ' 無回應：' + reason);
+    }
+    var text = data.candidates[0].content.parts[0].text;
+    var cleaned = text.trim().replace(/^```json\s*/,'').replace(/```\s*$/,'').trim();
+    callback(null, JSON.parse(cleaned));
+  })
+  .catch(function(err) {
+    if (retryCount < 3) {
+      setTimeout(function() { callGeminiWithFallback(parts, callback, retryCount + 1); }, 800);
+    } else {
+      callback(new Error('Gemini 服務暫時無法使用：' + err.message));
+    }
+  });
 }
 
 // 錄音相關
@@ -675,6 +736,10 @@ var audioChunks      = [];
 var isRecording      = false;
 var recTimerInterval = null;
 var recSeconds       = 0;
+
+// 總表語音錄音相關
+var sumRecorder = null, sumAudioChunks = [], sumIsRecording = false;
+var sumRecTimer = null, sumRecSeconds = 0;
 
 // 轉盤
 var wheelStudentIdx = -1;
@@ -721,14 +786,8 @@ function jsonpCall(params, callback) {
 // 登入 / 登出
 // ══════════════════════════════════════════════
 window.addEventListener('load', function() {
-  // 填入已儲存的 API URL
   if (API_URL) document.getElementById('login-api-url').value = API_URL;
-
-  // 嘗試自動登入（若有儲存的授權碼）
-  if (API_URL && AUTH_CODE) {
-    autoLogin();
-  }
-
+  if (API_URL && AUTH_CODE) autoLogin();
   document.addEventListener('click', function(e) {
     if (!document.getElementById('att-popup').contains(e.target) &&
         !e.target.classList.contains('cell-att')) closeAttPopup();
@@ -742,7 +801,6 @@ function autoLogin() {
   jsonpCall({ action: 'verifyAuth', authCode: AUTH_CODE }, function(err, data) {
     document.getElementById('login-btn').disabled = false;
     if (err || !data || !data.ok) {
-      // 自動登入失敗，清掉舊 token，等待手動登入
       localStorage.removeItem('nc_auth_code');
       AUTH_CODE = '';
       document.getElementById('login-err').textContent = '';
@@ -755,18 +813,12 @@ function autoLogin() {
 function doLogin() {
   var apiUrl = document.getElementById('login-api-url').value.trim();
   var code   = document.getElementById('login-code').value.trim();
-
-  if (apiUrl) {
-    API_URL = apiUrl;
-    localStorage.setItem('nc_api_url', apiUrl);
-  }
+  if (apiUrl) { API_URL = apiUrl; localStorage.setItem('nc_api_url', apiUrl); }
   if (!API_URL) { document.getElementById('login-err').textContent = '請填入 GAS API 網址'; return; }
   if (!code)    { document.getElementById('login-err').textContent = '請輸入授權碼'; return; }
-
   var btn = document.getElementById('login-btn');
   btn.textContent = '驗證中...'; btn.disabled = true;
   document.getElementById('login-err').textContent = '';
-
   jsonpCall({ action: 'verifyAuth', authCode: code }, function(err, data) {
     btn.textContent = '登入'; btn.disabled = false;
     if (err) { document.getElementById('login-err').textContent = '❌ 連線失敗，請確認 API 網址'; return; }
@@ -779,30 +831,19 @@ function doLogin() {
 
 function onLoginSuccess(data) {
   currentUser = data;
-  // 更新 auth bar
   document.getElementById('auth-name-display').textContent = data.name;
   var roleEl = document.getElementById('auth-role-display');
   roleEl.textContent = data.role === 'admin' ? '管理員' : '老師';
   roleEl.className = 'auth-role' + (data.role === 'admin' ? ' admin' : '');
-
-  // 切換到主畫面
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-screen').style.display  = 'block';
-
-  // 只有 admin 顯示總覽頁籤
   var overviewTab = document.getElementById('tab-overview');
   if (overviewTab) {
     overviewTab.style.display = data.role === 'admin' ? 'inline-block' : 'none';
     if (data.role === 'admin') initOverviewTab();
   }
-
-  // 載入老師有權限的班級清單
   jsonpCall({ action: 'getMyClasses', authCode: AUTH_CODE }, function(err, data) {
-    if (err || !data || !data.ok) {
-      populateAllClassSelects([]);
-      return;
-    }
-    // admin 的 myClasses 為 null，改呼叫 getClassList 取全部
+    if (err || !data || !data.ok) { populateAllClassSelects([]); return; }
     if (data.role === 'admin' || !data.myClasses) {
       jsonpCall({ action: 'getClassList' }, function(err2, list) {
         populateAllClassSelects((!err2 && list && !list.error) ? list : []);
@@ -815,32 +856,25 @@ function onLoginSuccess(data) {
 }
 
 function doLogout() {
-  currentUser = null;
-  AUTH_CODE   = '';
+  currentUser = null; AUTH_CODE = '';
   localStorage.removeItem('nc_auth_code');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('main-screen').style.display  = 'none';
   document.getElementById('login-code').value = '';
   document.getElementById('login-err').textContent = '';
-  // 重設所有選單
   classData = summaryData = null;
 }
 
 // ══════════════════════════════════════════════
-// 班級清單（以權限清單填充，不再呼叫 getClassList）
+// 班級清單
 // ══════════════════════════════════════════════
 function populateAllClassSelects(classList) {
   var opts = '<option value="">請選擇班級...</option>';
   classList.forEach(function(c){ opts += '<option value="'+c+'">'+c+'</option>'; });
-
-  document.getElementById('class-sel').innerHTML     = opts;
-  document.getElementById('sum-class-sel').innerHTML = opts;
-  document.getElementById('rpt-class-sel').innerHTML = opts;
-  document.getElementById('exam-class-sel').innerHTML= opts;
-
-  // 綁定 change 事件（避免重複綁定用 onchange 屬性方式）
-  document.getElementById('class-sel').onchange     = onClassChange;
-  document.getElementById('sum-class-sel').onchange = onSumClassChange;
+  document.getElementById('class-sel').innerHTML      = opts;
+  document.getElementById('sum-class-sel').innerHTML  = opts;
+  document.getElementById('rpt-class-sel').innerHTML  = opts;
+  document.getElementById('exam-class-sel').innerHTML = opts;
 }
 
 function loadGeminiKey() {
@@ -853,42 +887,19 @@ function loadGeminiKey() {
 }
 
 // ══════════════════════════════════════════════
-// Gemini 語音辨識（瀏覽器直接呼叫）
+// Gemini 語音辨識
 // ══════════════════════════════════════════════
 function callGemini(base64, mimeType, studentList, callback) {
   var prompt = '你是點名助手。學生名單：[ ' + studentList + ' ]。\n' +
     '請聽錄音，辨識老師說了哪些學生的出席狀況或分數。\n' +
-    '輸出純 JSON 陣列（不要加 markdown），格式：\n' +
-    '[{"name":"學生名","status":"符號","score":"分數或空字串","comment":"一句幽默評論"}]\n' +
+    '輸出格式（JSON 陣列）：[{"name":"學生名","status":"符號","score":"分數或空字串","comment":"一句幽默評論"}]\n' +
     '出席符號規則：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
-    '沒提到分數就填空字串。只輸出 JSON，不要其他文字。';
-
-  var payload = {
-    contents: [{ parts: [
-      { text: prompt },
-      { inline_data: { mime_type: mimeType, data: base64 } }
-    ]}],
-    generationConfig: {}
-  };
-
-  fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if (!data.candidates || !data.candidates[0]) {
-      var reason = (data.promptFeedback && data.promptFeedback.blockReason) || JSON.stringify(data);
-      throw new Error('Gemini 無回應：' + reason);
-    }
-    var text = data.candidates[0].content.parts[0].text;
-    var cleaned = text.trim();
-    if (cleaned.indexOf('```') !== -1) { cleaned = cleaned.replace(/```json/g,'').replace(/```/g,'').trim(); }
-    var updates = JSON.parse(cleaned);
-    callback(null, updates);
-  })
-  .catch(function(err){ callback(err); });
+    '沒提到分數就填空字串。';
+  var parts = [
+    { text: prompt },
+    { inline_data: { mime_type: mimeType, data: base64 } }
+  ];
+  callGeminiWithFallback(parts, callback);
 }
 
 function showToast(msg) {
@@ -941,47 +952,45 @@ function onClassChange() {
   });
 }
 
+// ✅ 修正 3：onDateChange 立即清空狀態，防止舊資料殘留
 function onDateChange() {
   var className = document.getElementById('class-sel').value;
   var colIdx    = parseInt(document.getElementById('date-sel').value);
-  
   if (!className || isNaN(colIdx)) return;
 
-  // --- 關鍵修正：重設全域狀態 ---
-  classData = null;       // 清空舊的班級資料物件
-  lastMatchIdx = -1;      // 重設最後匹配的學生索引，避免高亮錯位
-  
-  // 隱藏 Gemini 上次的結果區域（如果有）
+  // 立即清空舊狀態
+  classData    = null;
+  lastMatchIdx = -1;
+
+  // 隱藏 Gemini 上次結果
   var geminiRes = document.getElementById('gemini-result');
   if (geminiRes) geminiRes.style.display = 'none';
 
+  // 顯示載入中（防止舊按鈕被點擊）
   document.getElementById('student-table-wrap').innerHTML = '<div class="loading">讀取中...</div>';
   document.getElementById('attend-main').style.display = 'block';
+  document.getElementById('lesson-info').style.display = 'none';
+  setStatus('載入中...', 'info');
 
   jsonpCall({ action:'getClassDataByCol', className:className, attCol:colIdx }, function(err, data) {
-    if (err || !data || data.error) { 
-      setStatus((data && data.error) || '讀取失敗', 'err'); 
-      return; 
+    if (err || !data || data.error) {
+      setStatus((data && data.error) || '讀取失敗', 'err');
+      document.getElementById('student-table-wrap').innerHTML = '<div class="empty">❌ 讀取失敗</div>';
+      return;
     }
-    
-    // 寫入新的日期資料，這包含新的 attCol 與 scoreCol 索引
-    classData = data; 
-    
+    classData = data;
     document.getElementById('info-unit').textContent    = data.unitText    || '--';
     document.getElementById('info-lesson').textContent  = (data.lessonText || '').replace(' 點名','') || '--';
     document.getElementById('info-teacher').textContent = data.teacherText || '--';
     document.getElementById('lesson-info').style.display = 'block';
-    
     setStatus('已載入 ' + data.dateText + ' · 共 ' + data.students.length + ' 位學生', 'ok');
-    
-    // 重新渲染表格，確保按鈕綁定的寫入動作指向正確的欄位
-    renderAttTable(); 
+    renderAttTable();
     renderAttSummaryBar();
   });
 }
 
-// 寫入時帶上授權碼
 function writeOne(idx, status, score) {
+  if (!classData) return;
   var st = classData.students[idx];
   if (status !== null && status !== undefined) st.status = status;
   if (score  !== null && score  !== undefined) st.score  = score;
@@ -998,6 +1007,7 @@ function writeOne(idx, status, score) {
 }
 
 function clickStatus(idx, sym) {
+  if (!classData) return;
   var st=classData.students[idx];
   var newSym=st.status===sym?'':sym;
   writeOne(idx,newSym,null);
@@ -1043,6 +1053,7 @@ function renderAttSummaryBar() {
 }
 
 function renderAttRow(idx) {
+  if(!classData) return;
   var st=classData.students[idx];
   var row=document.getElementById('arow-'+idx);
   if(!row) return;
@@ -1195,14 +1206,13 @@ function applyGeminiResults(updates) {
 function onSumClassChange() {
   var className = document.getElementById('sum-class-sel').value;
   summaryData = null;
-  summaryStructure = null; // 每次換班級都清空結構
+  summaryStructure = null;
   document.getElementById('alert-cards').style.display = 'none';
   document.getElementById('summary-wrap').innerHTML = '<div class="loading">讀取中...</div>';
-    if (!className) {
+  if (!className) {
     document.getElementById('summary-wrap').innerHTML = '<div class="empty">請選擇班級</div>';
     return;
   }
-  // 同步讀取結構與資料
   jsonpCall({action:'getSummaryStructure', className:className}, function(err, struct) {
     if (!err && struct) summaryStructure = struct;
   });
@@ -1215,6 +1225,7 @@ function onSumClassChange() {
     renderSummaryTable();
   });
 }
+
 function setFilter(f) {
   currentFilter=f;
   ['all','makeup','hw'].forEach(function(id){
@@ -1223,7 +1234,6 @@ function setFilter(f) {
   if(summaryData) renderSummaryTable();
 }
 
-// 局部更新總表單一格（不重繪整個表格，避免頁面跳回頂部）
 function updateSummaryCell(studentIdx, lessonIdx) {
   if (!summaryData) return;
   var st  = summaryData.students[studentIdx];
@@ -1243,14 +1253,12 @@ function updateSummaryCell(studentIdx, lessonIdx) {
   var hasScore     = (rec.score !== '');
   var scoreDisplay = hasScore ? rec.score : '<span style="color:#ccc">-</span>';
 
-  // 建立 att span
   var attEl = document.createElement('span');
   attEl.className = 'cell-att';
   attEl.title = '點擊修改出席';
   attEl.innerHTML = attDisplay;
   attEl.onclick = (function(si, li){ return function(e){ openAttPopup(e, si, li); }; })(studentIdx, lessonIdx);
 
-  // 建立 score span
   var scoreEl = document.createElement('span');
   scoreEl.className = 'cell-score' + (hasScore ? ' has-score' : '');
   scoreEl.title = '點擊修改分數';
@@ -1307,7 +1315,7 @@ function renderSummaryTable() {
       var rec=st.lessonRecords[l]||{att:'',score:'',attRow:0,attCol:0,scoreRow:0,scoreCol:0};
       var attCls=ATT_CLASS[rec.att]||'';
       var needMakeup=rec.att==='\u25cb'||rec.att==='\u25b3';
-      var needHw=rec.att!=='\u25cb'&&rec.att!=='\u25b3'&&rec.att!=='\u25cf'&&rec.att!=='\u25b2'&&rec.score===''&&(rec.att==='V'||rec.att==='\u229d'||rec.att==='');
+      var needHw=rec.att!==''&&rec.att!=='\u25cf'&&rec.att!=='\u25b2'&&rec.score===''&&(rec.att==='V'||rec.att==='\u229d');
       var cellBg=needMakeup?'missing-makeup':(needHw?'missing-hw':'');
       var attDisplay=rec.att?'<span class="'+attCls+'">'+rec.att+'</span>':'<span style="color:#ddd">·</span>';
       var hasScore=rec.score!=='';
@@ -1365,7 +1373,6 @@ function selectAttSym(sym) {
   var st  = summaryData.students[ctx.studentIdx];
   var rec = st.lessonRecords[ctx.lessonIdx];
   var oldAtt = rec.att;
-  // 樂觀更新：先更新畫面，背景再寫入
   rec.att = sym;
   updateSummaryCell(ctx.studentIdx, ctx.lessonIdx);
   closeAttPopup();
@@ -1376,7 +1383,6 @@ function selectAttSym(sym) {
   }, function(err,r){
     if(r&&r.ok) showToast('✅ 已更新');
     else {
-      // 寫入失敗：還原資料和畫面
       rec.att = oldAtt;
       updateSummaryCell(ctx.studentIdx, ctx.lessonIdx);
       showToast('❌ 寫入失敗：' + (r&&r.msg||''));
@@ -1445,7 +1451,6 @@ function openWheel(studentIdx, mode, lessonIdx) {
 }
 function closeWheel(){
   document.getElementById('wheel-overlay').style.display='none';
-  // 若是考試模式關閉，還原成 0-100 轉盤
   if (wheelContext && wheelContext.mode === 'exam') buildWheel();
   wheelContext=null; wheelStudentIdx=-1;
 }
@@ -1455,13 +1460,11 @@ function confirmScore() {
   if(!wheelContext||wheelValue===null) return;
   var ctx=wheelContext;
   if(ctx.mode==='exam'){
-    // 考試成績轉盤確認
     var input = ctx.input;
-    var idx   = ctx.examIdx;
     input.value = wheelValue;
     onScoreInput(input);
     closeWheel();
-    buildWheel(); // 還原成 0-100 轉盤
+    buildWheel();
     return;
   }
   if(ctx.mode==='attend'){
@@ -1474,7 +1477,6 @@ function confirmScore() {
     var rec=st.lessonRecords[ctx.lessonIdx];
     var oldScore = rec.score;
     var sIdx = ctx.studentIdx, lIdx = ctx.lessonIdx;
-    // 樂觀更新：先更新畫面，背景再寫入
     rec.score = String(wheelValue);
     closeWheel();
     updateSummaryCell(sIdx, lIdx);
@@ -1485,13 +1487,12 @@ function confirmScore() {
     }, function(err,r){
       if(r&&r.ok) showToast('✅ 已更新');
       else {
-        // 寫入失敗：還原資料和畫面
         rec.score = oldScore;
         updateSummaryCell(sIdx, lIdx);
         showToast('❌ 寫入失敗：' + (r&&r.msg||''));
       }
     });
-    return; // closeWheel 已在上面呼叫
+    return;
   }
   closeWheel();
 }
@@ -1509,7 +1510,6 @@ function clearScore() {
     var rec=st.lessonRecords[ctx.lessonIdx];
     var oldScore = rec.score;
     var sIdx = ctx.studentIdx, lIdx = ctx.lessonIdx;
-    // 樂觀更新：先更新畫面，背景再寫入
     rec.score = '';
     closeWheel();
     updateSummaryCell(sIdx, lIdx);
@@ -1558,7 +1558,6 @@ function onRptClassChange() {
   document.getElementById('report-main').style.display  = 'none';
   document.getElementById('report-empty').style.display = 'block';
   if (!className) { stuSel.innerHTML = '<option value="">請先選班級</option>'; return; }
-
   jsonpCall({ action:'getClassSummary', className:className }, function(err, data) {
     if (err || !data || data.error) { stuSel.innerHTML = '<option value="">讀取失敗</option>'; return; }
     reportClassStudents = data.students;
@@ -1582,7 +1581,6 @@ function loadStudentReport() {
   if (!className || !row) return;
   document.getElementById('rpt-load-btn').disabled = true;
   document.getElementById('rpt-load-btn').textContent = '載入中...';
-
   jsonpCall({ action:'getStudentReport', className:className, studentRow:row }, function(err, data) {
     document.getElementById('rpt-load-btn').disabled = false;
     document.getElementById('rpt-load-btn').textContent = '載入成績單';
@@ -1627,7 +1625,7 @@ function renderReport() {
   html += '</div>';
   html += '<div class="rpt-body">';
   var attScore   = d.attendanceScore;
-  var radarVals  = [attScore, d.homeworkAvg, d.quizAvg, d.testAvg, perfScore]; // attendanceScore 已是百分比數字
+  var radarVals  = [attScore, d.homeworkAvg, d.quizAvg, d.testAvg, perfScore];
   html += '<div class="rpt-chart-row">';
   html += '<div class="rpt-radar-wrap"><canvas id="radar-canvas" width="260" height="220"></canvas></div>';
   html += '<div class="rpt-stats-list">';
@@ -1731,23 +1729,14 @@ function genComment() {
     '學期總分：' + d.totalScore.toFixed(1),
     '出勤：請假 ' + d.leaveCount + ' 次，缺席 ' + d.absenceCount + ' 次',
     '作業均分：' + d.homeworkAvg + '，小考：' + d.quizAvg + '，大考：' + d.testAvg + '，口語表現：' + perfScore,
-    '請根據數據給出溫暖、具體、正向的評語，並提出一個改進建議。只輸出評語文字，不要其他說明。'
+    '請根據數據給出溫暖、具體、正向的評語，並提出一個改進建議。以 JSON 格式回傳：{"comment":"評語文字"}'
   ].join('\n');
-  fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
+  callGeminiWithFallback([{ text: prompt }], function(err, result) {
     btn.textContent = '🤖 Gemini 生成評語'; btn.disabled = false;
-    if (!data.candidates || !data.candidates[0]) { showToast('❌ Gemini 無回應'); return; }
-    var comment = data.candidates[0].content.parts[0].text.trim();
-    document.getElementById('rpt-comment').value = comment;
-  })
-  .catch(function(err){
-    btn.textContent = '🤖 Gemini 生成評語'; btn.disabled = false;
-    showToast('❌ 生成失敗：' + err.message);
+    if (err) { showToast('❌ 生成失敗：' + err.message); return; }
+    // 評語是純文字，result 可能是字串或物件
+    var comment = (typeof result === 'string') ? result : (result.comment || result.text || JSON.stringify(result));
+    document.getElementById('rpt-comment').value = comment.trim();
   });
 }
 
@@ -1774,7 +1763,7 @@ function sendReportEmail() {
   var d        = reportData;
   var attDesc  = (d.leaveCount === 0 && d.absenceCount === 0)
     ? '🌟 全勤' : '請假 ' + d.leaveCount + ' / 缺席 ' + d.absenceCount;
-  var attScore = d.attendanceScore; // 已是百分比數字
+  var attScore = d.attendanceScore;
   var htmlBody = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">';
   htmlBody += '<div style="background:#274e13;color:white;padding:16px 20px;border-radius:8px 8px 0 0;text-align:center;">';
   htmlBody += '<h2 style="margin:0;font-size:17px;">🎓 ' + d.className + ' 學習成果報告單</h2></div>';
@@ -1798,7 +1787,6 @@ function sendReportEmail() {
   }
   htmlBody += '<p style="font-size:11px;color:#999;text-align:right;margin-top:12px;">'+d.teacher+' 老師　'+d.today+'</p>';
   htmlBody += '</div>';
-
   fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1911,6 +1899,9 @@ function downloadPDF() {
   win.document.close();
 }
 
+// ══════════════════════════════════════════════
+// 總表語音輸入
+// ══════════════════════════════════════════════
 function toggleSumMic() {
   if (sumIsRecording) { stopSumRecording(); } else { startSumRecording(); }
 }
@@ -1919,7 +1910,6 @@ function startSumRecording() {
   var className = document.getElementById('sum-class-sel').value;
   if (!className) { showSumStatus('❌ 請先選擇班級', 'err'); return; }
   if (!navigator.mediaDevices) { showSumStatus('❌ 不支援錄音', 'err'); return; }
-
   var doRecord = function() {
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
       sumAudioChunks = [];
@@ -1943,7 +1933,6 @@ function startSumRecording() {
       }, 1000);
     }).catch(function(err) { showSumStatus('❌ 麥克風錯誤', 'err'); });
   };
-
   if (summaryStructure && summaryStructure.className === className) {
     doRecord();
   } else {
@@ -1978,67 +1967,105 @@ function processSumAudio(mimeType, className) {
 function callGeminiSummary(base64, mimeType, className) {
   var struct = summaryStructure;
   var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(',');
-  var lessonRef = struct.lessons.map(function(l, i){ return i + ":" + l.unit + l.lesson; }).join(',');
-  var prompt = "助手。名單:[" + studentRef + "]。課堂:[" + lessonRef + "]。JSON:[{\"student\":\"名\",\"lessonIdx\":索引,\"field\":\"att或score\",\"value\":\"值\"}]";
+  var lessonRef = struct.lessons.map(function(l, i){ return i + ':' + l.unit + l.lesson; }).join(',');
+  var prompt =
+    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。\n' +
+    '學生名單：[' + studentRef + ']\n' +
+    '課堂清單（索引:名稱）：[' + lessonRef + ']\n' +
+    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]\n' +
+    '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
+    '只輸出 JSON，不要其他文字。';
 
-  fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }] })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data) {
+  var parts = [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }];
+  callGeminiWithFallback(parts, function(err, commands) {
     document.getElementById('sum-mic-btn').textContent = '🎤 AI 語音輸入';
     document.getElementById('sum-mic-btn').className = 'mic-btn';
-    document.getElementById('sum-mic-btn').disabled = false;
-    var text = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '');
-    var commands = JSON.parse(text);
-    var cells = [];
+    if (err) { showSumStatus('❌ Gemini 錯誤：' + err.message, 'err'); return; }
+
+    // ✅ 修正 B：cells 同時記錄 studentIdx + lessonIdx，供畫面更新用
+    var cells = [];       // 傳給 GAS 寫入的格子
+    var uiUpdates = [];   // 畫面更新用的 {studentIdx, lessonIdx, field, value}
+
     commands.forEach(function(cmd) {
-      var targetStudents = [];
       var upName = (cmd.student || '').toLowerCase().replace(/\s/g,'');
-      if (upName === 'all') { targetStudents = struct.students; }
-      else {
-        struct.students.forEach(function(s) {
-          if ((s.eName||'').toLowerCase().includes(upName) || (s.cName||'').includes(upName)) targetStudents.push(s);
+      var isScore = ['score','points','grade','分數'].includes((cmd.field||'').toLowerCase().trim());
+      var vals = (cmd.value || '').toString().split(',').map(function(v){ return v.trim(); });
+      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : [parseInt(cmd.lessonIdx)];
+
+      // 找匹配的 summaryStructure 學生（有 row）
+      var matchedStructStudents = [];
+      if (upName === 'all') {
+        matchedStructStudents = struct.students.map(function(s, si){ return { s: s, si: si }; });
+      } else {
+        struct.students.forEach(function(s, si) {
+          if ((s.eName||'').toLowerCase().includes(upName) || (s.cName||'').includes(upName)) {
+            matchedStructStudents.push({ s: s, si: si });
+          }
         });
       }
-      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : [cmd.lessonIdx];
-      var isScore = ['score','points','grade','分數'].includes((cmd.field||'').toLowerCase().trim());
-      var vals = (cmd.value || '').toString().split(',').map(v => v.trim());
-      targetStudents.forEach(function(st) {
+
+      matchedStructStudents.forEach(function(item) {
+        var structSt = item.s;
+        var structRow = structSt.sheetRow || structSt.row;
         indices.forEach(function(lIdx, vIdx) {
           var lesson = struct.lessons[lIdx];
           if (!lesson) return;
           var col = isScore ? lesson.scoreCol : lesson.attCol;
-          if (col) cells.push({ row: st.sheetRow || st.row, col: col, value: vals[vIdx] || vals[0] });
+          var value = vals[vIdx] || vals[0];
+          if (col) {
+            cells.push({ row: structRow, col: col, value: value });
+          }
+
+          // 找對應的 summaryData 學生 index
+          if (summaryData) {
+            var sumIdx = -1;
+            summaryData.students.forEach(function(sumSt, i) {
+              if ((sumSt.sheetRow || sumSt.row) === structRow) sumIdx = i;
+            });
+            if (sumIdx >= 0) {
+              uiUpdates.push({ studentIdx: sumIdx, lessonIdx: lIdx, field: isScore ? 'score' : 'att', value: value });
+            }
+          }
         });
       });
     });
-    if (!cells.length) { showSumStatus('⚠️ 未匹配', 'err'); return; }
-    showSumStatus('⏳ 同步中...', 'info');
+
+    if (!cells.length) {
+      showSumStatus('⚠️ 未匹配任何學生或堂次，請重試', 'err');
+      return;
+    }
+
+    // Debug：確認 cells 內容是否正確
+    console.log('[writeSummaryCells] className:', className);
+    console.log('[writeSummaryCells] cells:', JSON.stringify(cells));
+
+    showSumStatus('⏳ 寫入中（' + cells.length + ' 格）...', 'info');
+
     fetch(API_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'writeSummaryCells', authCode: AUTH_CODE, className: className, cells: JSON.stringify(cells) })
     })
     .then(function(r){ return r.json(); })
     .then(function(res) {
       if (res && res.ok) {
-        cells.forEach(function(c) {
-          summaryData.students.forEach(function(st) {
-            if ((st.sheetRow || st.row) === c.row) {
-              st.lessonRecords.forEach(function(rec) {
-                if (rec.attCol === c.col) rec.att = c.value;
-                if (rec.scoreCol === c.col) rec.score = c.value;
-              });
-            }
+        // ✅ 用 studentIdx + lessonIdx 直接更新，不需要 col 比對
+        if (summaryData) {
+          uiUpdates.forEach(function(u) {
+            var st = summaryData.students[u.studentIdx];
+            if (!st || !st.lessonRecords[u.lessonIdx]) return;
+            if (u.field === 'att') st.lessonRecords[u.lessonIdx].att = u.value;
+            else                   st.lessonRecords[u.lessonIdx].score = u.value;
           });
-        });
-        showSumStatus('✅ 更新 ' + cells.length + ' 筆', 'ok');
+        }
+        showSumStatus('✅ 寫入 ' + cells.length + ' 格，畫面已更新', 'ok');
         renderSummaryTable();
+      } else {
+        showSumStatus('❌ 寫入失敗：' + (res && res.msg || ''), 'err');
       }
-    });
-  }).catch(function(e){ showSumStatus('❌ 錯誤', 'err'); });
+    })
+    .catch(function(e){ showSumStatus('❌ 寫入請求失敗：' + e.message, 'err'); });
+  });
 }
 
 function showSumStatus(msg, type) {
@@ -2048,15 +2075,13 @@ function showSumStatus(msg, type) {
   el.className = 'status-bar ' + (type || '');
   el.style.display = 'flex';
 }
+
 // ══════════════════════════════════════════════
 // 考試成績頁
 // ══════════════════════════════════════════════
 var examData        = null;
 var currentExamIdx  = -1;
 var pendingChanges  = {};
-// ══════════════════════════════════════════════
-// 考試成績語音輸入 (使用 3.1 Flash-Lite)
-// ══════════════════════════════════════════════
 var examRecorder = null, examAudioChunks = [], examIsRecording = false;
 var examRecTimer = null, examRecSeconds = 0;
 
@@ -2072,7 +2097,7 @@ function startExamRecording() {
     examRecorder = new MediaRecorder(stream);
     examRecorder.addEventListener('dataavailable', function(e) { if (e.data.size > 0) examAudioChunks.push(e.data); });
     examRecorder.addEventListener('stop', function() {
-      stream.getTracks().forEach(t => t.stop());
+      stream.getTracks().forEach(function(t){ t.stop(); });
       processExamAudio(mimeType);
     });
     examRecorder.start();
@@ -2081,7 +2106,7 @@ function startExamRecording() {
     document.getElementById('exam-mic-btn').className = 'mic-btn recording';
     document.getElementById('exam-rec-timer').style.display = 'flex';
     examRecSeconds = 0;
-    examRecTimer = setInterval(() => {
+    examRecTimer = setInterval(function(){
       examRecSeconds++;
       document.getElementById('exam-rec-timer').textContent = examRecSeconds + 's';
       if (examRecSeconds >= 45) stopExamRecording();
@@ -2103,77 +2128,37 @@ function stopExamRecording() {
 function processExamAudio(mimeType) {
   var blob = new Blob(examAudioChunks, { type: mimeType });
   var reader = new FileReader();
-  
   reader.onloadend = function() {
     var base64 = reader.result.split(',')[1];
-    var studentList = examData.students.map(s => s.eName || s.cName).join(', ');
-    
-    // 針對 3.1 Flash-Lite 最佳化的 Prompt
-    var prompt = "你是成績輸入助手。名單：[" + studentList + "]。請聽錄音並辨識學生的分數。\n" +
-                 "輸出規範：僅輸出純 JSON 陣列，禁止任何 Markdown 標記或解釋文字。\n" +
-                 "格式：[{\"name\":\"學生名\",\"score\":數字}]";
-
-    fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        contents: [{ 
-          parts: [
-            { text: prompt }, 
-            { inline_data: { mime_type: mimeType, data: base64 } }
-          ] 
-        }] 
-      })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      // 恢復按鈕狀態
+    var studentList = examData.students.map(function(s){ return s.eName || s.cName; }).join(', ');
+    var prompt = "你是成績輸入助手。名單：[" + studentList + "]。請聽錄音並辨識學生的分數。" +
+                 "格式（JSON 陣列）：[{\"name\":\"學生名\",\"score\":數字}]";
+    var parts = [
+      { text: prompt },
+      { inline_data: { mime_type: mimeType, data: base64 } }
+    ];
+    callGeminiWithFallback(parts, function(err, results) {
       var btn = document.getElementById('exam-mic-btn');
       btn.textContent = '🎤 語音輸入成績';
       btn.className = 'mic-btn';
-
-      if (!data.candidates || !data.candidates[0]) {
-        throw new Error("Gemini 無回應或被安全過濾");
-      }
-
-      var text = data.candidates[0].content.parts[0].text;
-      
-      // 核心清理邏輯：移除 ```json 或 ``` 標籤
-      var cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      try {
-        var results = JSON.parse(cleanedText);
-        applyExamVoiceResults(results);
-      } catch (jsonErr) {
-        console.error("JSON 解析失敗，原始文字:", text);
-        showExamStatus('❌ 格式解析錯誤，請重唸一次', 'err');
-      }
-    })
-    .catch(function(err) {
-      // 錯誤發生時恢復按鈕
-      var btn = document.getElementById('exam-mic-btn');
-      btn.textContent = '🎤 語音輸入成績';
-      btn.className = 'mic-btn';
-      
-      showExamStatus('❌ 辨識失敗：' + err.message, 'err');
-      console.error('Gemini API Error:', err);
+      if (err) { showExamStatus('❌ 辨識失敗：' + err.message, 'err'); return; }
+      applyExamVoiceResults(results);
     });
   };
-  
   reader.readAsDataURL(blob);
 }
 
 function applyExamVoiceResults(results) {
   var matched = 0;
   var inputs = document.querySelectorAll('.score-input');
-  results.forEach(res => {
+  results.forEach(function(res) {
     var upName = res.name.toLowerCase().replace(/\s/g,'');
     for (var i = 0; i < examData.students.length; i++) {
       var st = examData.students[i];
       if ((st.eName||'').toLowerCase() === upName || (st.cName||'') === upName) {
         if (inputs[i]) {
           inputs[i].value = res.score;
-          onScoreInput(inputs[i]); // 觸發變色與暫存邏輯
+          onScoreInput(inputs[i]);
           matched++;
         }
       }
@@ -2188,6 +2173,7 @@ function showExamStatus(msg, type) {
   el.style.display = 'block';
   el.className = 'status-bar ' + type;
 }
+
 function onExamClassChange() {
   var className = document.getElementById('exam-class-sel').value;
   examData = null; currentExamIdx = -1; pendingChanges = {};
@@ -2239,16 +2225,13 @@ function renderExamTable() {
   var exam     = examData.exams[currentExamIdx];
   var students = examData.students;
   var scores   = exam.scores || [];
-
   var filled = 0, total = students.length, sum = 0, count = 0;
   scores.forEach(function(s) { if (s !== '') { filled++; sum += parseFloat(s)||0; count++; } });
   var avg = count > 0 ? (sum / count).toFixed(1) : '--';
-
   document.getElementById('exam-stats').innerHTML =
     '已填 <span style="color:#274e13">' + filled + '</span> / ' + total + ' 人　' +
     '平均 <span style="color:#1a5276">' + avg + '</span> 分　' +
     '<span style="color:#999">（Tab 鍵跳下一格）</span>';
-
   var html = '';
   students.forEach(function(st, i) {
     var score   = scores[i] !== undefined ? scores[i] : '';
@@ -2348,21 +2331,15 @@ function openExamWheel(idx) {
   var input  = inputs[idx];
   if (!input) return;
   var st = examData.students[idx];
-  var name = st.eName && st.cName
-    ? st.eName + '　' + st.cName
-    : (st.eName || st.cName);
+  var name = st.eName && st.cName ? st.eName + '　' + st.cName : (st.eName || st.cName);
   var exam = examData.exams[currentExamIdx];
   var initVal = input.value !== '' ? parseInt(input.value) : 80;
   if (isNaN(initVal) || initVal < 0) initVal = 80;
   if (initVal > 110) initVal = 110;
-
-  // 用現有轉盤，但暫時切換到考試模式
   wheelContext = { mode: 'exam', examIdx: idx, input: input };
   document.getElementById('wheel-student-name').textContent = name + '　' + exam.label;
   document.getElementById('wheel-score-display').textContent = initVal;
   document.getElementById('wheel-overlay').style.display = 'flex';
-
-  // 重建轉盤 0-110
   buildExamWheel();
   wheelValue = initVal;
   highlightCenter(initVal);
@@ -2375,7 +2352,6 @@ function buildExamWheel() {
   for (var i = 0; i <= 110; i++) html += '<div class="wheel-item" data-val="' + i + '" onclick="wheelTap(' + i + ')">' + i + '</div>';
   html += '<div class="wheel-item" style="height:64px;"></div><div class="wheel-item" style="height:64px;"></div>';
   scroll.innerHTML = html;
-  // 快捷按鈕（考試用）
   var quick = document.getElementById('wheel-quick');
   var qHtml = '';
   QUICK_SCORES.forEach(function(q){ qHtml += '<button class="quick-btn" onclick="wheelTap(' + q + ')">' + q + '</button>'; });
@@ -2394,59 +2370,46 @@ function saveExamScores() {
   var exam    = examData.exams[currentExamIdx];
   var inputs  = document.querySelectorAll('.score-input');
   var scores  = [];
-  
-  // 收集畫面上所有輸入的分數
   inputs.forEach(function(inp) {
     scores.push({ row: inp.dataset.row, score: inp.value.trim() });
   });
-
   var btn = document.querySelector('#exam-score-card .rpt-btn');
-  btn.textContent = '⏳ 儲存中...'; 
+  btn.textContent = '⏳ 儲存中...';
   btn.disabled = true;
-
-  // 使用最穩定的傳送技術：將物件轉為字串送出
   fetch(API_URL, {
     method: 'POST',
-    // 移除特定 Header 以避開某些環境下的 Load failed 錯誤
     body: JSON.stringify({
       action:    'saveExamScores',
       authCode:  AUTH_CODE,
       className: examData.className,
       colIdx:    exam.colIdx,
-      scores:    JSON.stringify(scores) // 【關鍵修正】將陣列字串化後傳送
+      scores:    JSON.stringify(scores)
     })
   })
-  .then(function(r) { 
-    return r.json(); 
-  })
+  .then(function(r) { return r.json(); })
   .then(function(result) {
-    btn.textContent = '💾 儲存全部分數'; 
+    btn.textContent = '💾 儲存全部分數';
     btn.disabled = false;
-    
     if (result && result.ok) {
-      // 更新成功後，同步更新 local 的快取資料，避免切換頁籤時出現未儲存警告
       examData.exams[currentExamIdx].scores = scores.map(function(s){ return s.score; });
       pendingChanges = {};
       updateSaveInfo();
       showToast('✅ ' + result.msg);
     } else {
-      showToast('❌ 儲存失敗：' + (result && result.msg || (result && result.error || '')));
+      showToast('❌ 儲存失敗：' + (result && result.msg || ''));
     }
   })
   .catch(function(err) {
-    btn.textContent = '💾 儲存全部分數'; 
+    btn.textContent = '💾 儲存全部分數';
     btn.disabled = false;
-    showToast('❌ 連線失敗 (Load failed)：' + err.message);
-    console.error('Fetch error:', err);
+    showToast('❌ 連線失敗：' + err.message);
   });
 }
 
 // ══════════════════════════════════════════════
 // 總覽頁（管理員專用）
 // ══════════════════════════════════════════════
-
 function initOverviewTab() {
-  // 載入老師清單
   jsonpCall({ action: 'getTeacherList' }, function(err, data) {
     if (err || !data || data.error) return;
     var sel = document.getElementById('overview-teacher-sel');
@@ -2466,14 +2429,8 @@ function loadOverview() {
   var teacherName = document.getElementById('overview-teacher-sel').value;
   var threshold   = parseFloat(document.getElementById('overview-threshold').value) || 80;
   if (!teacherName) { showToast('❌ 請先選擇老師'); return; }
-
   document.getElementById('overview-result').innerHTML = '<div class="overview-loading">⏳ 載入中，請稍候...</div>';
-
-  jsonpCall({
-    action: 'getTeacherOverview',
-    teacherName: teacherName,
-    threshold: threshold
-  }, function(err, data) {
+  jsonpCall({ action: 'getTeacherOverview', teacherName: teacherName, threshold: threshold }, function(err, data) {
     if (err || !data || data.error) {
       document.getElementById('overview-result').innerHTML = '<div class="empty">❌ 載入失敗</div>';
       return;
@@ -2496,74 +2453,50 @@ function renderOverview(data, threshold) {
       '<div class="card"><div class="empty">找不到 ' + data.teacherName + ' 的班級</div></div>';
     return;
   }
-
   var totalAttAlerts = 0, totalScoreAlerts = 0;
   data.classes.forEach(function(c) {
     totalAttAlerts   += c.attendanceAlerts.length;
     totalScoreAlerts += c.scoreAlerts.length;
   });
-
   var html = '';
-
-  // 頂部摘要
   html += '<div class="card" style="background:#f8f9fa;margin-bottom:14px;">';
   html += '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">';
   html += '<div style="flex:1;font-size:13px;font-weight:700;color:#274e13;">' + data.teacherName + ' 老師　共 ' + data.classes.length + ' 個班級</div>';
   html += '<div style="font-size:12px;color:#856404;">⚠️ 出勤警示 ' + totalAttAlerts + ' 人次</div>';
   html += '<div style="font-size:12px;color:#c0392b;">📊 成績警示 ' + totalScoreAlerts + ' 筆（低於 ' + threshold + ' 分 / 缺考）</div>';
   html += '</div></div>';
-
-  // 每個班的卡片
   data.classes.forEach(function(cls) {
     var hasAtt   = cls.attendanceAlerts.length > 0;
     var hasScore = cls.scoreAlerts.length > 0;
     var badgeClass = (hasAtt || hasScore) ? 'warn' : 'ok';
-    var badgeText  = (hasAtt || hasScore)
-      ? '⚠️ 需注意'
-      : '✅ 正常';
-
+    var badgeText  = (hasAtt || hasScore) ? '⚠️ 需注意' : '✅ 正常';
     html += '<div class="class-card">';
-    html += '<div class="class-card-header">';
-    html += '<h4>' + cls.className + '</h4>';
-    html += '<span class="class-card-badge ' + badgeClass + '">' + badgeText + '</span>';
-    html += '</div>';
+    html += '<div class="class-card-header"><h4>' + cls.className + '</h4>';
+    html += '<span class="class-card-badge ' + badgeClass + '">' + badgeText + '</span></div>';
     html += '<div class="class-card-body">';
-
-    // 出勤警示
     html += '<div class="alert-section-title">⚠️ 未補課 / 缺作業</div>';
     if (!hasAtt) {
       html += '<div class="no-alert">✓ 無警示</div>';
     } else {
       cls.attendanceAlerts.forEach(function(a) {
-        html += '<div class="alert-row">';
-        html += '<div class="alert-name">' + a.name + '</div>';
-        html += '<div class="alert-detail">';
-        if (a.missingMakeup.length) {
-          html += '<span style="color:#856404;">未補課：' + a.missingMakeup.join(', ') + '</span>';
-        }
+        html += '<div class="alert-row"><div class="alert-name">' + a.name + '</div><div class="alert-detail">';
+        if (a.missingMakeup.length) html += '<span style="color:#856404;">未補課：' + a.missingMakeup.join(', ') + '</span>';
         if (a.missingMakeup.length && a.missingHw.length) html += '　';
-        if (a.missingHw.length) {
-          html += '<span style="color:#c0392b;">缺作業：' + a.missingHw.join(', ') + '</span>';
-        }
+        if (a.missingHw.length) html += '<span style="color:#c0392b;">缺作業：' + a.missingHw.join(', ') + '</span>';
         html += '</div></div>';
       });
     }
-
-    // 成績警示
     html += '<div class="alert-section-title">📊 成績低於 ' + threshold + ' 分 / 缺考</div>';
     if (!hasScore) {
       html += '<div class="no-alert">✓ 無警示</div>';
     } else {
-      // 按學生分組
       var byStudent = {};
       cls.scoreAlerts.forEach(function(a) {
         if (!byStudent[a.name]) byStudent[a.name] = [];
         byStudent[a.name].push(a);
       });
       Object.keys(byStudent).forEach(function(name) {
-        html += '<div class="alert-row">';
-        html += '<div class="alert-name">' + name + '</div>';
-        html += '<div class="alert-detail">';
+        html += '<div class="alert-row"><div class="alert-name">' + name + '</div><div class="alert-detail">';
         byStudent[name].forEach(function(a, i) {
           if (i > 0) html += '　';
           if (a.missing) {
@@ -2576,13 +2509,10 @@ function renderOverview(data, threshold) {
         html += '</div></div>';
       });
     }
-
-    html += '</div></div>'; // class-card-body + class-card
+    html += '</div></div>';
   });
-
   document.getElementById('overview-result').innerHTML = html;
 }
-
 </script>
 </body>
 </html>
