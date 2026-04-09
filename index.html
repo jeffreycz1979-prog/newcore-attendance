@@ -1974,15 +1974,7 @@ function callGeminiSummary(base64, mimeType, className) {
     '- field: att=出席符號欄, score=作業/分數欄',
     '- value: 出席符號(V=到/○=缺/△=假/●=補缺/▲=補假/⊝=遲)，或數字分數，多筆依序用逗號分隔',
     '',
-    '範例：「Unit3之前全班出席，除了 David Lesson2 請假」',
-    '→ [{"student":"ALL","lessonIdx":[0,1,2,3,4],"field":"att","value":"V"},',
-    '   {"student":"David","lessonIdx":[某索引],"field":"att","value":"△"}]',
-    '',
-    '範例：「David Unit1 六堂作業成績依序是 100,99,95,89,92,88」',
-    '→ [{"student":"David","lessonIdx":[0,1,2,3,4,5],"field":"score","value":"100,99,95,89,92,88"}]',
-    '',
-    '日期也可用來定位，如「5月1日之前」找對應日期索引。',
-    '只輸出 JSON，不加其他說明。'
+    '只輸出 JSON，不要其他說明。'
   ].join('\n');
 
   var payload = {
@@ -2004,22 +1996,19 @@ function callGeminiSummary(base64, mimeType, className) {
     btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
 
     if (!data.candidates || !data.candidates[0]) {
-      var reason = (data.promptFeedback && data.promptFeedback.blockReason) || JSON.stringify(data);
-      showSumStatus('❌ Gemini 無回應：' + reason, 'err'); return;
+      showSumStatus('❌ Gemini 無回應', 'err'); return;
     }
     var text = data.candidates[0].content.parts[0].text.trim();
     if (text.indexOf('```') !== -1) text = text.replace(/```json/g,'').replace(/```/g,'').trim();
 
     var commands;
     try { commands = JSON.parse(text); }
-    catch(e) { showSumStatus('❌ 解析 Gemini 回應失敗：' + e.message, 'err'); return; }
+    catch(e) { showSumStatus('❌ 解析語音指令失敗', 'err'); return; }
 
-    // 把指令轉成 cells 陣列
     var cells = [];
     var notFound = [];
 
     commands.forEach(function(cmd) {
-      // 找學生
       var targetStudents = [];
       if ((cmd.student || '').toUpperCase() === 'ALL') {
         targetStudents = struct.students;
@@ -2032,20 +2021,10 @@ function callGeminiSummary(base64, mimeType, className) {
             targetStudents.push(s);
           }
         });
-        if (!targetStudents.length) { notFound.push('學生：' + cmd.student); return; }
       }
 
-      // 找課堂（lessonIdx 可以是數字或陣列）
-      var indices = [];
-      if (Array.isArray(cmd.lessonIdx)) {
-        indices = cmd.lessonIdx;
-      } else if (typeof cmd.lessonIdx === 'number') {
-        indices = [cmd.lessonIdx];
-      }
+      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : (typeof cmd.lessonIdx === 'number' ? [cmd.lessonIdx] : []);
       var targetLessons = indices.map(function(idx) { return struct.lessons[idx]; }).filter(Boolean);
-      if (!targetLessons.length) { notFound.push('課堂索引：' + JSON.stringify(cmd.lessonIdx)); return; }
-
-      // 分數可能是逗號分隔的多筆
       var values = (cmd.value || '').toString().split(',').map(function(v){ return v.trim(); });
 
       targetStudents.forEach(function(st) {
@@ -2059,19 +2038,52 @@ function callGeminiSummary(base64, mimeType, className) {
     });
 
     if (!cells.length) {
-      showSumStatus(notFound.length ? '⚠️ 未找到對應資料：' + notFound.join('、') : '⚠️ 沒有可寫入的資料', 'err');
+      showSumStatus('⚠️ 未匹配到名單內的學生或課程', 'err');
       return;
     }
 
-    // 分批 JSONP 寫入（每批最多 15 格，避免 URL 超長）
-    showSumStatus('⏳ 寫入中...', 'info');
-    var BATCH = 15;
-    var batches = [];
-    for (var bi = 0; bi < cells.length; bi += BATCH) {
-      batches.push(cells.slice(bi, bi + BATCH));
-    }
-    var batchIdx = 0;
-    var failed = 0;
+    // --- 關鍵修正：改用 POST 進行同步寫入 ---
+    showSumStatus('⏳ 正在同步至雲端試算表...', 'info');
+    
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'writeSummaryCells',
+        authCode: AUTH_CODE,
+        className: className,
+        cells: JSON.stringify(cells) // 轉為字串打包
+      })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(r) {
+      if (r && r.ok) {
+        // 後端寫入成功後，才更新前端記憶體
+        cells.forEach(function(c) {
+          if (!summaryData) return;
+          summaryData.students.forEach(function(st) {
+            if (st.sheetRow !== c.row) return;
+            st.lessonRecords.forEach(function(rec) {
+              if (rec.attCol === c.col)   rec.att   = c.value;
+              if (rec.scoreCol === c.col) rec.score = c.value;
+            });
+          });
+        });
+        showSumStatus('✅ 成功寫入 ' + cells.length + ' 格資料', 'ok');
+        renderSummaryTable(); // 重新繪製表格
+      } else {
+        showSumStatus('❌ 雲端寫入失敗：' + (r ? r.msg : '未知錯誤'), 'err');
+      }
+    })
+    .catch(function(err) {
+      showSumStatus('❌ 網路連線錯誤 (POST)', 'err');
+    });
+  })
+  .catch(function(err) {
+    var btn = document.getElementById('sum-mic-btn');
+    btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
+    showSumStatus('❌ Gemini API 錯誤', 'err');
+  });
+}
 
     function writeBatch() {
       if (batchIdx >= batches.length) {
