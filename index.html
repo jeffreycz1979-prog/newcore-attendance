@@ -406,19 +406,27 @@
 
   <!-- ══ 點名頁 ══ -->
   <div class="page active" id="page-attend">
-    <div class="card">
-      <div class="row2">
-        <div><label>班級</label>
-          <select id="class-sel"><option value="">請先選班級...</option></select></div>
-        <div><label>堂次 / 日期</label>
-          <select id="date-sel" disabled><option value="">請先選班級</option></select></div>
+  <div class="card">
+    <div class="row2">
+      <div>
+        <label>班級</label>
+        <select id="class-sel" onchange="onClassChange()">
+          <option value="">請先選班級...</option>
+        </select>
       </div>
-      <div id="lesson-info" style="display:none;">
-        <div class="lesson-info">
-          <div class="info-box"><div class="val" id="info-unit">--</div><div class="lbl">單元</div></div>
-          <div class="info-box"><div class="val" id="info-lesson">--</div><div class="lbl">堂數</div></div>
-          <div class="info-box"><div class="val" id="info-teacher">--</div><div class="lbl">授課老師</div></div>
-        </div>
+      <div>
+        <label>堂次 / 日期</label>
+        <select id="date-sel" onchange="onDateChange()" disabled>
+          <option value="">請先選班級</option>
+        </select>
+      </div>
+    </div>
+    
+    <div id="lesson-info" style="display:none;">
+      <div class="lesson-info">
+        <div class="info-box"><div class="val" id="info-unit">--</div><div class="lbl">單元</div></div>
+        <div class="info-box"><div class="val" id="info-lesson">--</div><div class="lbl">堂數</div></div>
+        <div class="info-box"><div class="val" id="info-teacher">--</div><div class="lbl">授課老師</div></div>
       </div>
     </div>
     <div id="attend-main" style="display:none;">
