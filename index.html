@@ -2125,7 +2125,140 @@ function showSumStatus(msg, type) {
 var examData        = null;
 var currentExamIdx  = -1;
 var pendingChanges  = {};
+// ══════════════════════════════════════════════
+// 考試成績語音輸入 (使用 3.1 Flash-Lite)
+// ══════════════════════════════════════════════
+var examRecorder = null, examAudioChunks = [], examIsRecording = false;
+var examRecTimer = null, examRecSeconds = 0;
 
+function toggleExamMic() {
+  if (examIsRecording) { stopExamRecording(); } else { startExamRecording(); }
+}
+
+function startExamRecording() {
+  if (!examData || currentExamIdx < 0) { showExamStatus('❌ 請先選班級與考試', 'err'); return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    var mimeType = 'audio/webm';
+    examAudioChunks = [];
+    examRecorder = new MediaRecorder(stream);
+    examRecorder.addEventListener('dataavailable', function(e) { if (e.data.size > 0) examAudioChunks.push(e.data); });
+    examRecorder.addEventListener('stop', function() {
+      stream.getTracks().forEach(t => t.stop());
+      processExamAudio(mimeType);
+    });
+    examRecorder.start();
+    examIsRecording = true;
+    document.getElementById('exam-mic-btn').textContent = '⏹ 停止並辨識';
+    document.getElementById('exam-mic-btn').className = 'mic-btn recording';
+    document.getElementById('exam-rec-timer').style.display = 'flex';
+    examRecSeconds = 0;
+    examRecTimer = setInterval(() => {
+      examRecSeconds++;
+      document.getElementById('exam-rec-timer').textContent = examRecSeconds + 's';
+      if (examRecSeconds >= 45) stopExamRecording();
+    }, 1000);
+    showExamStatus('🔴 錄音中... 例如唸：Amy 90分、Brian 80分', 'info');
+  });
+}
+
+function stopExamRecording() {
+  if (!examRecorder || !examIsRecording) return;
+  examIsRecording = false;
+  clearInterval(examRecTimer);
+  document.getElementById('exam-rec-timer').style.display = 'none';
+  examRecorder.stop();
+  document.getElementById('exam-mic-btn').textContent = '⏳ 辨識中...';
+  document.getElementById('exam-mic-btn').className = 'mic-btn processing';
+}
+
+function processExamAudio(mimeType) {
+  var blob = new Blob(examAudioChunks, { type: mimeType });
+  var reader = new FileReader();
+  
+  reader.onloadend = function() {
+    var base64 = reader.result.split(',')[1];
+    var studentList = examData.students.map(s => s.eName || s.cName).join(', ');
+    
+    // 針對 3.1 Flash-Lite 最佳化的 Prompt
+    var prompt = "你是成績輸入助手。名單：[" + studentList + "]。請聽錄音並辨識學生的分數。\n" +
+                 "輸出規範：僅輸出純 JSON 陣列，禁止任何 Markdown 標記或解釋文字。\n" +
+                 "格式：[{\"name\":\"學生名\",\"score\":數字}]";
+
+    fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        contents: [{ 
+          parts: [
+            { text: prompt }, 
+            { inline_data: { mime_type: mimeType, data: base64 } }
+          ] 
+        }] 
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      // 恢復按鈕狀態
+      var btn = document.getElementById('exam-mic-btn');
+      btn.textContent = '🎤 語音輸入成績';
+      btn.className = 'mic-btn';
+
+      if (!data.candidates || !data.candidates[0]) {
+        throw new Error("Gemini 無回應或被安全過濾");
+      }
+
+      var text = data.candidates[0].content.parts[0].text;
+      
+      // 核心清理邏輯：移除 ```json 或 ``` 標籤
+      var cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      try {
+        var results = JSON.parse(cleanedText);
+        applyExamVoiceResults(results);
+      } catch (jsonErr) {
+        console.error("JSON 解析失敗，原始文字:", text);
+        showExamStatus('❌ 格式解析錯誤，請重唸一次', 'err');
+      }
+    })
+    .catch(function(err) {
+      // 錯誤發生時恢復按鈕
+      var btn = document.getElementById('exam-mic-btn');
+      btn.textContent = '🎤 語音輸入成績';
+      btn.className = 'mic-btn';
+      
+      showExamStatus('❌ 辨識失敗：' + err.message, 'err');
+      console.error('Gemini API Error:', err);
+    });
+  };
+  
+  reader.readAsDataURL(blob);
+}
+
+function applyExamVoiceResults(results) {
+  var matched = 0;
+  var inputs = document.querySelectorAll('.score-input');
+  results.forEach(res => {
+    var upName = res.name.toLowerCase().replace(/\s/g,'');
+    for (var i = 0; i < examData.students.length; i++) {
+      var st = examData.students[i];
+      if ((st.eName||'').toLowerCase() === upName || (st.cName||'') === upName) {
+        if (inputs[i]) {
+          inputs[i].value = res.score;
+          onScoreInput(inputs[i]); // 觸發變色與暫存邏輯
+          matched++;
+        }
+      }
+    }
+  });
+  showExamStatus('✅ 語音已填入 ' + matched + ' 筆，請檢查後儲存', 'ok');
+}
+
+function showExamStatus(msg, type) {
+  var el = document.getElementById('exam-status-bar');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.className = 'status-bar ' + type;
+}
 function onExamClassChange() {
   var className = document.getElementById('exam-class-sel').value;
   examData = null; currentExamIdx = -1; pendingChanges = {};
