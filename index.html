@@ -2320,28 +2320,37 @@ function saveExamScores() {
   var exam    = examData.exams[currentExamIdx];
   var inputs  = document.querySelectorAll('.score-input');
   var scores  = [];
+  
+  // 收集畫面上所有輸入的分數
   inputs.forEach(function(inp) {
     scores.push({ row: inp.dataset.row, score: inp.value.trim() });
   });
 
   var btn = document.querySelector('#exam-score-card .rpt-btn');
-  btn.textContent = '⏳ 儲存中...'; btn.disabled = true;
+  btn.textContent = '⏳ 儲存中...'; 
+  btn.disabled = true;
 
+  // 使用最穩定的傳送技術：將物件轉為字串送出
   fetch(API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // 移除特定 Header 以避開某些環境下的 Load failed 錯誤
     body: JSON.stringify({
       action:    'saveExamScores',
       authCode:  AUTH_CODE,
       className: examData.className,
       colIdx:    exam.colIdx,
-      scores:    scores
+      scores:    JSON.stringify(scores) // 【關鍵修正】將陣列字串化後傳送
     })
   })
-  .then(function(r){ return r.json(); })
+  .then(function(r) { 
+    return r.json(); 
+  })
   .then(function(result) {
-    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
+    btn.textContent = '💾 儲存全部分數'; 
+    btn.disabled = false;
+    
     if (result && result.ok) {
+      // 更新成功後，同步更新 local 的快取資料，避免切換頁籤時出現未儲存警告
       examData.exams[currentExamIdx].scores = scores.map(function(s){ return s.score; });
       pendingChanges = {};
       updateSaveInfo();
@@ -2351,8 +2360,10 @@ function saveExamScores() {
     }
   })
   .catch(function(err) {
-    btn.textContent = '💾 儲存全部分數'; btn.disabled = false;
-    showToast('❌ 儲存失敗：' + err.message);
+    btn.textContent = '💾 儲存全部分數'; 
+    btn.disabled = false;
+    showToast('❌ 連線失敗 (Load failed)：' + err.message);
+    console.error('Fetch error:', err);
   });
 }
 
