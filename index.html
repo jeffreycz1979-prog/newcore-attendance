@@ -2006,18 +2006,70 @@ function callGeminiSummary(base64, mimeType, className) {
     catch(e) { showSumStatus('❌ 解析語音指令失敗', 'err'); return; }
 
     var cells = [];
+    var notFound = [];
+
     commands.forEach(function(cmd) {
+      // 1. 確定目標學生
       var targetStudents = [];
       if ((cmd.student || '').toUpperCase() === 'ALL') {
         targetStudents = struct.students;
       } else {
-        var upName = (cmd.student || '').toLowerCase().replace(/\s/g,'');
+        var upName = (cmd.student || '').toLowerCase().replace(/\s/g, '');
         struct.students.forEach(function(s) {
-          var se = (s.eName || '').toLowerCase().replace(/\s/g,'');
-          var sc = (s.cName || '').toLowerCase().replace(/\s/g,'');
+          var se = (s.eName || '').toLowerCase().replace(/\s/g, '');
+          var sc = (s.cName || '').toLowerCase().replace(/\s/g, '');
           if (se === upName || sc === upName || (upName.length >= 2 && se.indexOf(upName) !== -1)) {
             targetStudents.push(s);
           }
+        });
+        if (targetStudents.length === 0) notFound.push('學生:' + cmd.student);
+      }
+
+      // 2. 確定目標課堂 (lessonIdx)
+      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : (typeof cmd.lessonIdx === 'number' ? [cmd.lessonIdx] : []);
+      var targetLessons = indices.map(function(idx) { return struct.lessons[idx]; }).filter(Boolean);
+      if (targetLessons.length === 0) notFound.push('課堂索引:' + cmd.lessonIdx);
+
+      // 3. 處理數值
+      var values = (cmd.value || '').toString().split(',').map(function(v) { return v.trim(); });
+
+      // 4. 關鍵：判定是寫入「出席」還是「分數」
+      // 增加容錯：不論 Gemini 回傳 score, Score, Score欄位, 或是 points 都能識別
+      var f = (cmd.field || '').toLowerCase().trim();
+      var isScore = (f === 'score' || f === 'points' || f === 'grade' || f === '分數');
+
+      targetStudents.forEach(function(st) {
+        targetLessons.forEach(function(lesson, li) {
+          // 如果是多筆數值(如 90,80,70) 則對應多堂課，否則重複使用第一筆
+          var val = values.length > 1 ? (values[li] !== undefined ? values[li] : '') : values[0];
+          if (val === '' || val === undefined) return;
+
+          // 根據判定選取欄位
+          var col = isScore ? lesson.scoreCol : lesson.attCol;
+
+          // 偵錯提示：如果發現要填分數但結構裡沒給 scoreCol，在控制台報警
+          if (!col) {
+            console.error('❌ 欄位定義缺失:', st.eName, '課堂:', lesson.lesson, '類型:', f);
+            return;
+          }
+
+          cells.push({
+            row: st.row, // 這是學生在試算表的真實行號
+            col: col,    // 這是對應的出席欄或分數欄
+            value: val
+          });
+        });
+      });
+    });
+
+    console.log("🚀 準備寫入的 Cells:", cells); // 測試時可以按 F12 檢查這行
+
+    if (!cells.length) {
+      showSumStatus(notFound.length ? '⚠️ ' + notFound.join('、') : '⚠️ 未能辨識有效的寫入目標', 'err');
+      return;
+    }
+
+    // 後續 fetch API_URL 的邏輯不變...
         });
       }
 
