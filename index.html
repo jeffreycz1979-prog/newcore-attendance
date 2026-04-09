@@ -1967,13 +1967,35 @@ function processSumAudio(mimeType, className) {
 function callGeminiSummary(base64, mimeType, className) {
   var struct = summaryStructure;
   var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(',');
-  var lessonRef = struct.lessons.map(function(l, i){ return i + ':' + l.unit + l.lesson; }).join(',');
+
+  // 只取最近 6 堂（有日期的），讓 Gemini 更容易判斷正確堂次
+  var lessons = struct.lessons;
+  var recentStart = Math.max(0, lessons.length - 6);
+  var recentLessons = lessons.slice(recentStart);
+  var lessonRef = recentLessons.map(function(l, i){
+    return (recentStart + i) + ':' + l.unit + ' ' + l.lesson + '(' + l.date + ')';
+  }).join(',');
+
+  // 找最後一堂有資料的堂次作為「預設堂次」提示
+  var defaultIdx = recentStart + recentLessons.length - 1;
+  var defaultLesson = lessons[defaultIdx];
+  var defaultHint = defaultLesson
+    ? '如果老師沒有特別說明是哪一堂，請預設為最新的這堂：索引' + defaultIdx + '（' + defaultLesson.unit + ' ' + defaultLesson.lesson + ' ' + defaultLesson.date + '）'
+    : '';
+
   var prompt =
-    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。\n' +
-    '學生名單：[' + studentRef + ']\n' +
-    '課堂清單（索引:名稱）：[' + lessonRef + ']\n' +
-    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]\n' +
-    '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
+    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。
+' +
+    '學生名單：[' + studentRef + ']
+' +
+    '最近課堂（索引:名稱日期）：[' + lessonRef + ']
+' +
+    defaultHint + '
+' +
+    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]
+' +
+    '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝
+' +
     '只輸出 JSON，不要其他文字。';
 
   var parts = [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }];
