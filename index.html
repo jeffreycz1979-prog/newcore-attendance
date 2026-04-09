@@ -1984,18 +1984,12 @@ function callGeminiSummary(base64, mimeType, className) {
     : '';
 
   var prompt =
-    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。
-' +
-    '學生名單：[' + studentRef + ']
-' +
-    '最近課堂（索引:名稱日期）：[' + lessonRef + ']
-' +
-    defaultHint + '
-' +
-    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]
-' +
-    '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝
-' +
+    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。\n' +
+    '學生名單：[' + studentRef + ']\n' +
+    '最近課堂（索引:名稱日期）：[' + lessonRef + ']\n' +
+    defaultHint + '\n' +
+    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]\n' +
+    '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
     '只輸出 JSON，不要其他文字。';
 
   var parts = [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }];
