@@ -2039,64 +2039,31 @@ function processSumAudio(mimeType, className) {
 
 function callGeminiSummary(base64, mimeType, className) {
   var struct = summaryStructure;
-  var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(', ');
-  var lessonRef  = struct.lessons.map(function(l, i){
-    return i + ':' + l.unit + ' ' + l.lesson + (l.date ? '(' + l.date + ')' : '');
-  }).join(', ');
+  var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(',');
+  var lessonRef = struct.lessons.map(function(l, i){ return i + ":" + l.unit + l.lesson; }).join(',');
 
-  var prompt = [
-    '你是補習班總表資料輸入助手。',
-    '學生名單：[ ' + studentRef + ' ]',
-    '課堂清單（索引:Unit 堂次 日期）：[ ' + lessonRef + ' ]',
-    '',
-    '請聽錄音辨識老師的指令，輸出純 JSON 陣列，每筆格式：',
-    '[{"student":"學生名或ALL","lessonIdx":數字或數字陣列,"field":"att或score","value":"值或逗號分隔值"}]',
-    '',
-    '規則：',
-    '- student: 全班=ALL，特定學生填英文名或中文名',
-    '- lessonIdx: 對應課堂清單的索引數字（0開始），若是連續範圍用陣列如[0,1,2,3]',
-    '- field: att=出席符號欄, score=作業/分數欄',
-    '- value: 出席符號(V=到/○=缺/△=假/●=補缺/▲=補假/⊝=遲)，或數字分數，多筆依序用逗號分隔',
-    '',
-    '只輸出 JSON，不要其他說明。'
-  ].join('\n');
-
-  var payload = {
-    contents: [{ parts: [
-      { text: prompt },
-      { inline_data: { mime_type: mimeType, data: base64 } }
-    ]}],
-    generationConfig: {}
-  };
+  var prompt = "你是助手。名單:[" + studentRef + "]。課堂:[" + lessonRef + "]。\n" +
+               "輸出 JSON 陣列: [{\"student\":\"名\",\"lessonIdx\":索引,\"field\":\"att或score\",\"value\":\"值\"}]。";
 
   fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }]
+    })
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var btn = document.getElementById('sum-mic-btn');
-    btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
+    if (btn) { btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false; }
 
-    if (!data.candidates || !data.candidates[0]) {
-      showSumStatus('❌ Gemini 無回應', 'err'); return;
-    }
+    if (!data.candidates || !data.candidates[0]) throw new Error("Gemini無回應");
     var text = data.candidates[0].content.parts[0].text.trim();
-    if (text.indexOf('```') !== -1) text = text.replace(/```json/g,'').replace(/```/g,'').trim();
-
-    var commands;
-    try { 
-      commands = JSON.parse(text); 
-    } catch(e) { 
-      showSumStatus('❌ 解析語音指令失敗', 'err'); return; 
-    }
-
+    text = text.replace(/```json/g,'').replace(/```/g,'').trim();
+    var commands = JSON.parse(text);
     var cells = [];
-    var notFound = [];
 
     commands.forEach(function(cmd) {
-      // 1. 找學生
       var targetStudents = [];
       if ((cmd.student || '').toUpperCase() === 'ALL') {
         targetStudents = struct.students;
@@ -2105,55 +2072,32 @@ function callGeminiSummary(base64, mimeType, className) {
         struct.students.forEach(function(s) {
           var se = (s.eName || '').toLowerCase().replace(/\s/g,'');
           var sc = (s.cName || '').toLowerCase().replace(/\s/g,'');
-          if (se === upName || sc === upName || (upName.length >= 2 && se.indexOf(upName) !== -1)) {
-            targetStudents.push(s);
-          }
+          if (se.indexOf(upName) !== -1 || sc.indexOf(upName) !== -1) targetStudents.push(s);
         });
-        if (targetStudents.length === 0) notFound.push('學生:' + cmd.student);
       }
 
-      // 2. 找課堂
-      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : (typeof cmd.lessonIdx === 'number' ? [cmd.lessonIdx] : []);
-      var targetLessons = indices.map(function(idx) { return struct.lessons[idx]; }).filter(Boolean);
-      if (targetLessons.length === 0) notFound.push('課堂:' + cmd.lessonIdx);
-
-      // 3. 處理數值
-      var values = (cmd.value || '').toString().split(',').map(function(v){ return v.trim(); });
-
-      // 4. 判定欄位類型 (強健版判定)
+      var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : [cmd.lessonIdx];
       var f = (cmd.field || '').toLowerCase().trim();
       var isScore = (f === 'score' || f === 'points' || f === 'grade' || f === '分數');
+      var values = (cmd.value || '').toString().split(',').map(function(v){ return v.trim(); });
 
       targetStudents.forEach(function(st) {
-        targetLessons.forEach(function(lesson, li) {
-          var val = values.length > 1 ? (values[li] !== undefined ? values[li] : '') : values[0];
-          if (val === '' || val === undefined) return;
-          
+        indices.forEach(function(lIdx, vIdx) {
+          var lesson = struct.lessons[lIdx];
+          if (!lesson) return;
+          var val = values[vIdx] !== undefined ? values[vIdx] : values[0];
           var col = isScore ? lesson.scoreCol : lesson.attCol;
-          if (col) {
-            cells.push({ row: st.row, col: col, value: val });
-          } else {
-            console.error('缺少欄位定義:', st.eName, f);
-          }
+          if (col) cells.push({ row: st.sheetRow || st.row, col: col, value: val });
         });
       });
     });
 
-    if (!cells.length) {
-      showSumStatus(notFound.length ? '⚠️ ' + notFound.join('、') : '⚠️ 未匹配到資料', 'err');
-      return;
-    }
+    if (cells.length === 0) { showSumStatus('⚠️ 未匹配到資料', 'err'); return; }
 
-    showSumStatus('⏳ 正在同步至雲端...', 'info');
-    
+    showSumStatus('⏳ 正在同步...', 'info');
     fetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'writeSummaryCells',
-        authCode: AUTH_CODE,
-        className: className,
-        cells: JSON.stringify(cells)
-      })
+      body: JSON.stringify({ action: 'writeSummaryCells', authCode: AUTH_CODE, className: className, cells: JSON.stringify(cells) })
     })
     .then(function(r){ return r.json(); })
     .then(function(res) {
@@ -2161,32 +2105,27 @@ function callGeminiSummary(base64, mimeType, className) {
         cells.forEach(function(c) {
           if (!summaryData) return;
           summaryData.students.forEach(function(st) {
-            if (st.sheetRow !== c.row) return;
-            st.lessonRecords.forEach(function(rec) {
-              if (rec.attCol === c.col)   rec.att   = c.value;
-              if (rec.scoreCol === c.col) rec.score = c.value;
-            });
+            var targetRow = st.sheetRow || st.row;
+            if (targetRow === c.row) {
+              st.lessonRecords.forEach(function(rec) {
+                if (rec.attCol === c.col) rec.att = c.value;
+                if (rec.scoreCol === c.col) rec.score = c.value;
+              });
+            }
           });
         });
         showSumStatus('✅ 成功更新 ' + cells.length + ' 筆', 'ok');
         renderSummaryTable();
       } else {
-        showSumStatus('❌ 寫入失敗：' + (res ? res.msg : '未知錯誤'), 'err');
+        showSumStatus('❌ 寫入失敗', 'err');
       }
-    })
-    .catch(function(err) {
-      showSumStatus('❌ 連線錯誤', 'err');
     });
   })
-  }).catch(function(err) {
-      var btn = document.getElementById('sum-mic-btn');
-      if (btn) {
-        btn.textContent = '🎤 AI 語音輸入';
-        btn.className = 'mic-btn';
-        btn.disabled = false;
-      }
-      showSumStatus('❌ Gemini API 錯誤：' + err.message, 'err');
-    });
+  .catch(function(err) {
+    var btn = document.getElementById('sum-mic-btn');
+    if (btn) { btn.textContent = '🎤 AI 語音輸入'; btn.disabled = false; }
+    showSumStatus('❌ 錯誤：' + err.message, 'err');
+  });
 }
 
 function showSumStatus(msg, type) {
