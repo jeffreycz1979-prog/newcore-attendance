@@ -1869,13 +1869,6 @@ function downloadPDF() {
   win.document.close();
 }
 
-══════════════════════════════════════════════
-// 總表語音輸入（瀏覽器直接呼叫 Gemini，結果再寫入 GAS）
-// ══════════════════════════════════════════════
-var sumRecorder = null, sumAudioChunks = [], sumIsRecording = false;
-var sumRecTimer = null, sumRecSeconds = 0;
-var summaryStructure = null; // { lessons, students } 從 GAS 取得的班級結構
-
 function toggleSumMic() {
   if (sumIsRecording) { stopSumRecording(); } else { startSumRecording(); }
 }
@@ -1883,49 +1876,38 @@ function toggleSumMic() {
 function startSumRecording() {
   var className = document.getElementById('sum-class-sel').value;
   if (!className) { showSumStatus('❌ 請先選擇班級', 'err'); return; }
-  if (!GEMINI_API_KEY) { showSumStatus('❌ Gemini Key 尚未載入，請重新連線', 'err'); return; }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showSumStatus('❌ 瀏覽器不支援錄音', 'err'); return;
-  }
+  if (!navigator.mediaDevices) { showSumStatus('❌ 不支援錄音', 'err'); return; }
 
-  // 先取得班級結構資料（若尚未取得）
   var doRecord = function() {
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
-      var mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
       sumAudioChunks = [];
-      sumRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-      sumRecorder.addEventListener('dataavailable', function(e) {
-        if (e.data && e.data.size > 0) sumAudioChunks.push(e.data);
-      });
-      sumRecorder.addEventListener('stop', function() {
+      sumRecorder = new MediaRecorder(stream);
+      sumRecorder.ondataavailable = function(e) { if (e.data.size > 0) sumAudioChunks.push(e.data); };
+      sumRecorder.onstop = function() {
         stream.getTracks().forEach(function(t){ t.stop(); });
-        processSumAudio(mimeType, className);
-      });
+        processSumAudio('audio/webm', className);
+      };
       sumRecorder.start();
       sumIsRecording = true;
-      var btn = document.getElementById('sum-mic-btn');
-      btn.textContent = '⏹ 停止錄音'; btn.className = 'mic-btn recording';
-      showSumStatus('🔴 錄音中... 說完再按停止（最長 60 秒）', 'info');
+      document.getElementById('sum-mic-btn').textContent = '⏹ 停止錄音';
+      document.getElementById('sum-mic-btn').className = 'mic-btn recording';
+      showSumStatus('🔴 錄音中...', 'info');
       sumRecSeconds = 0;
-      var timer = document.getElementById('sum-rec-timer');
-      timer.style.display = 'flex'; timer.textContent = '0s';
+      document.getElementById('sum-rec-timer').style.display = 'flex';
       sumRecTimer = setInterval(function(){
         sumRecSeconds++;
-        timer.textContent = sumRecSeconds + 's';
+        document.getElementById('sum-rec-timer').textContent = sumRecSeconds + 's';
         if (sumRecSeconds >= 60) stopSumRecording();
       }, 1000);
-    }).catch(function(err) { showSumStatus('❌ 無法取得麥克風：' + err.message, 'err'); });
+    }).catch(function(err) { showSumStatus('❌ 麥克風錯誤', 'err'); });
   };
 
   if (summaryStructure && summaryStructure.className === className) {
     doRecord();
   } else {
-    showSumStatus('⏳ 載入班級結構...', 'info');
+    showSumStatus('⏳ 載入結構...', 'info');
     jsonpCall({ action: 'getSummaryStructure', className: className }, function(err, data) {
-      if (err || !data || data.error) {
-        showSumStatus('❌ 載入班級結構失敗', 'err'); return;
-      }
+      if (err || !data || data.error) { showSumStatus('❌ 載入失敗', 'err'); return; }
       summaryStructure = data;
       doRecord();
     });
@@ -1938,17 +1920,15 @@ function stopSumRecording() {
   clearInterval(sumRecTimer);
   document.getElementById('sum-rec-timer').style.display = 'none';
   sumRecorder.stop();
-  var btn = document.getElementById('sum-mic-btn');
-  btn.textContent = '⏳ Gemini 辨識中...'; btn.className = 'mic-btn processing'; btn.disabled = true;
-  showSumStatus('⏳ 送出音訊，Gemini 解析指令中...', 'info');
+  document.getElementById('sum-mic-btn').textContent = '⏳ 辨識中...';
+  document.getElementById('sum-mic-btn').className = 'mic-btn processing';
 }
 
 function processSumAudio(mimeType, className) {
   var blob = new Blob(sumAudioChunks, { type: mimeType });
   var reader = new FileReader();
   reader.onloadend = function() {
-    var base64 = reader.result.split(',')[1];
-    callGeminiSummary(base64, mimeType, className);
+    callGeminiSummary(reader.result.split(',')[1], mimeType, className);
   };
   reader.readAsDataURL(blob);
 }
@@ -1957,60 +1937,44 @@ function callGeminiSummary(base64, mimeType, className) {
   var struct = summaryStructure;
   var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(',');
   var lessonRef = struct.lessons.map(function(l, i){ return i + ":" + l.unit + l.lesson; }).join(',');
-
-  var prompt = "你是助手。名單:[" + studentRef + "]。課堂:[" + lessonRef + "]。\n" +
-               "輸出 JSON 陣列: [{\"student\":\"名\",\"lessonIdx\":索引,\"field\":\"att或score\",\"value\":\"值\"}]。";
+  var prompt = "助手。名單:[" + studentRef + "]。課堂:[" + lessonRef + "]。JSON:[{\"student\":\"名\",\"lessonIdx\":索引,\"field\":\"att或score\",\"value\":\"值\"}]";
 
   fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }]
-    })
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }] })
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
-    var btn = document.getElementById('sum-mic-btn');
-    if (btn) { btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false; }
-
-    if (!data.candidates || !data.candidates[0]) throw new Error("Gemini無回應");
-    var text = data.candidates[0].content.parts[0].text.trim();
-    text = text.replace(/```json/g,'').replace(/```/g,'').trim();
+    document.getElementById('sum-mic-btn').textContent = '🎤 AI 語音輸入';
+    document.getElementById('sum-mic-btn').className = 'mic-btn';
+    document.getElementById('sum-mic-btn').disabled = false;
+    var text = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '');
     var commands = JSON.parse(text);
     var cells = [];
-
     commands.forEach(function(cmd) {
       var targetStudents = [];
-      if ((cmd.student || '').toUpperCase() === 'ALL') {
-        targetStudents = struct.students;
-      } else {
-        var upName = (cmd.student || '').toLowerCase().replace(/\s/g,'');
+      var upName = (cmd.student || '').toLowerCase().replace(/\s/g,'');
+      if (upName === 'all') { targetStudents = struct.students; }
+      else {
         struct.students.forEach(function(s) {
-          var se = (s.eName || '').toLowerCase().replace(/\s/g,'');
-          var sc = (s.cName || '').toLowerCase().replace(/\s/g,'');
-          if (se.indexOf(upName) !== -1 || sc.indexOf(upName) !== -1) targetStudents.push(s);
+          if ((s.eName||'').toLowerCase().includes(upName) || (s.cName||'').includes(upName)) targetStudents.push(s);
         });
       }
-
       var indices = Array.isArray(cmd.lessonIdx) ? cmd.lessonIdx : [cmd.lessonIdx];
-      var f = (cmd.field || '').toLowerCase().trim();
-      var isScore = (f === 'score' || f === 'points' || f === 'grade' || f === '分數');
-      var values = (cmd.value || '').toString().split(',').map(function(v){ return v.trim(); });
-
+      var isScore = ['score','points','grade','分數'].includes((cmd.field||'').toLowerCase().trim());
+      var vals = (cmd.value || '').toString().split(',').map(v => v.trim());
       targetStudents.forEach(function(st) {
         indices.forEach(function(lIdx, vIdx) {
           var lesson = struct.lessons[lIdx];
           if (!lesson) return;
-          var val = values[vIdx] !== undefined ? values[vIdx] : values[0];
           var col = isScore ? lesson.scoreCol : lesson.attCol;
-          if (col) cells.push({ row: st.sheetRow || st.row, col: col, value: val });
+          if (col) cells.push({ row: st.sheetRow || st.row, col: col, value: vals[vIdx] || vals[0] });
         });
       });
     });
-
-    if (cells.length === 0) { showSumStatus('⚠️ 未匹配到資料', 'err'); return; }
-
-    showSumStatus('⏳ 正在同步...', 'info');
+    if (!cells.length) { showSumStatus('⚠️ 未匹配', 'err'); return; }
+    showSumStatus('⏳ 同步中...', 'info');
     fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify({ action: 'writeSummaryCells', authCode: AUTH_CODE, className: className, cells: JSON.stringify(cells) })
@@ -2019,10 +1983,8 @@ function callGeminiSummary(base64, mimeType, className) {
     .then(function(res) {
       if (res && res.ok) {
         cells.forEach(function(c) {
-          if (!summaryData) return;
           summaryData.students.forEach(function(st) {
-            var targetRow = st.sheetRow || st.row;
-            if (targetRow === c.row) {
+            if ((st.sheetRow || st.row) === c.row) {
               st.lessonRecords.forEach(function(rec) {
                 if (rec.attCol === c.col) rec.att = c.value;
                 if (rec.scoreCol === c.col) rec.score = c.value;
@@ -2030,18 +1992,11 @@ function callGeminiSummary(base64, mimeType, className) {
             }
           });
         });
-        showSumStatus('✅ 成功更新 ' + cells.length + ' 筆', 'ok');
+        showSumStatus('✅ 更新 ' + cells.length + ' 筆', 'ok');
         renderSummaryTable();
-      } else {
-        showSumStatus('❌ 寫入失敗', 'err');
       }
     });
-  })
-  .catch(function(err) {
-    var btn = document.getElementById('sum-mic-btn');
-    if (btn) { btn.textContent = '🎤 AI 語音輸入'; btn.disabled = false; }
-    showSumStatus('❌ 錯誤：' + err.message, 'err');
-  });
+  }).catch(function(e){ showSumStatus('❌ 錯誤', 'err'); });
 }
 
 function showSumStatus(msg, type) {
