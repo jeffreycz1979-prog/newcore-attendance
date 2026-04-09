@@ -463,6 +463,9 @@
         <div style="flex:1;min-width:150px;">
           <label>選擇班級</label>
           <select id="sum-class-sel"><option value="">請先選班級...</option></select>
+            <select id="sum-class-sel" onchange="onSumClassChange()">
+               <option value="">請先選班級...</option>
+            </select>
         </div>
         <div style="display:flex;gap:6px;padding-bottom:1px;">
           <button class="filter-btn active" id="filter-all"    onclick="setFilter('all')">全部</button>
