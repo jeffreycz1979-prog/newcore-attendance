@@ -2178,11 +2178,23 @@ function callGeminiSummary(base64, mimeType, className) {
       showSumStatus('❌ 連線錯誤', 'err');
     });
   })
-  .catch(function(err) {
-    var btn = document.getElementById('sum-mic-btn');
-    btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
-    showSumStatus('❌ Gemini API 錯誤', 'err');
-  });
+  }).catch(function(err) {
+      var btn = document.getElementById('sum-mic-btn');
+      if (btn) {
+        btn.textContent = '🎤 AI 語音輸入';
+        btn.className = 'mic-btn';
+        btn.disabled = false;
+      }
+      showSumStatus('❌ Gemini API 錯誤：' + err.message, 'err');
+    });
+}
+
+function showSumStatus(msg, type) {
+  var el = document.getElementById('sum-status-bar');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-bar ' + (type || '');
+  el.style.display = 'flex';
 }
 // ══════════════════════════════════════════════
 // 考試成績頁
