@@ -2006,8 +2006,6 @@ function callGeminiSummary(base64, mimeType, className) {
     catch(e) { showSumStatus('❌ 解析語音指令失敗', 'err'); return; }
 
     var cells = [];
-    var notFound = [];
-
     commands.forEach(function(cmd) {
       var targetStudents = [];
       if ((cmd.student || '').toUpperCase() === 'ALL') {
@@ -2038,11 +2036,10 @@ function callGeminiSummary(base64, mimeType, className) {
     });
 
     if (!cells.length) {
-      showSumStatus('⚠️ 未匹配到名單內的學生或課程', 'err');
-      return;
+      showSumStatus('⚠️ 未匹配到任何資料', 'err'); return;
     }
 
-    showSumStatus('⏳ 正在同步至雲端試算表...', 'info');
+    showSumStatus('⏳ 正在同步至試算表...', 'info');
     
     fetch(API_URL, {
       method: 'POST',
@@ -2054,8 +2051,9 @@ function callGeminiSummary(base64, mimeType, className) {
       })
     })
     .then(function(r){ return r.json(); })
-    .then(function(r) {
-      if (r && r.ok) {
+    .then(function(res) {
+      if (res && res.ok) {
+        // 更新前端快取
         cells.forEach(function(c) {
           if (!summaryData) return;
           summaryData.students.forEach(function(st) {
@@ -2069,11 +2067,11 @@ function callGeminiSummary(base64, mimeType, className) {
         showSumStatus('✅ 成功寫入 ' + cells.length + ' 格資料', 'ok');
         renderSummaryTable();
       } else {
-        showSumStatus('❌ 雲端寫入失敗：' + (r ? r.msg : '未知錯誤'), 'err');
+        showSumStatus('❌ 寫入失敗：' + (res ? res.msg : '未知錯誤'), 'err');
       }
     })
     .catch(function(err) {
-      showSumStatus('❌ 網路連線錯誤 (POST)', 'err');
+      showSumStatus('❌ 連線錯誤', 'err');
     });
   })
   .catch(function(err) {
@@ -2081,54 +2079,15 @@ function callGeminiSummary(base64, mimeType, className) {
     btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
     showSumStatus('❌ Gemini API 錯誤', 'err');
   });
-} // <--- 確保最後只有一個結束大括號
-
-    function writeBatch() {
-      if (batchIdx >= batches.length) {
-        // 全部完成：局部更新 summaryData 並重繪
-        cells.forEach(function(c) {
-          if (!summaryData) return;
-          summaryData.students.forEach(function(st) {
-            if (st.sheetRow !== c.row) return;
-            st.lessonRecords.forEach(function(rec) {
-              if (rec.attCol === c.col)   rec.att   = c.value;
-              if (rec.scoreCol === c.col) rec.score = c.value;
-            });
-          });
-        });
-        var msg = '✅ 已寫入 ' + cells.length + ' 格';
-        if (failed) msg += '，' + failed + ' 批失敗';
-        if (notFound.length) msg += '　⚠️ 未找到：' + notFound.join('、');
-        showSumStatus(msg, failed ? 'err' : 'ok');
-        renderSummaryTable();
-        return;
-      }
-      var batch = batches[batchIdx++];
-      jsonpCall({
-        action: 'writeSummaryCells', authCode: AUTH_CODE,
-        className: className,
-        cells: JSON.stringify(batch)
-      }, function(err, r) {
-        if (err || !r || !r.ok) { failed++; }
-        writeBatch();
-      });
-    }
-    writeBatch();
-  })
-  .catch(function(err) {
-    var btn = document.getElementById('sum-mic-btn');
-    btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
-    showSumStatus('❌ Gemini 呼叫失敗：' + err.message, 'err');
-  });
 }
 
 function showSumStatus(msg, type) {
   var el = document.getElementById('sum-status-bar');
+  if (!el) return;
   el.textContent = msg;
   el.className = 'status-bar' + (type ? ' ' + type : '');
   el.style.display = 'flex';
 }
-
 // ══════════════════════════════════════════════
 // 考試成績頁
 // ══════════════════════════════════════════════
