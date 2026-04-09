@@ -933,18 +933,39 @@ function onClassChange() {
 function onDateChange() {
   var className = document.getElementById('class-sel').value;
   var colIdx    = parseInt(document.getElementById('date-sel').value);
+  
   if (!className || isNaN(colIdx)) return;
+
+  // --- 關鍵修正：重設全域狀態 ---
+  classData = null;       // 清空舊的班級資料物件
+  lastMatchIdx = -1;      // 重設最後匹配的學生索引，避免高亮錯位
+  
+  // 隱藏 Gemini 上次的結果區域（如果有）
+  var geminiRes = document.getElementById('gemini-result');
+  if (geminiRes) geminiRes.style.display = 'none';
+
   document.getElementById('student-table-wrap').innerHTML = '<div class="loading">讀取中...</div>';
   document.getElementById('attend-main').style.display = 'block';
+
   jsonpCall({ action:'getClassDataByCol', className:className, attCol:colIdx }, function(err, data) {
-    if (err || !data || data.error) { setStatus((data&&data.error)||'讀取失敗','err'); return; }
-    classData = data;
+    if (err || !data || data.error) { 
+      setStatus((data && data.error) || '讀取失敗', 'err'); 
+      return; 
+    }
+    
+    // 寫入新的日期資料，這包含新的 attCol 與 scoreCol 索引
+    classData = data; 
+    
     document.getElementById('info-unit').textContent    = data.unitText    || '--';
-    document.getElementById('info-lesson').textContent  = (data.lessonText||'').replace(' 點名','') || '--';
+    document.getElementById('info-lesson').textContent  = (data.lessonText || '').replace(' 點名','') || '--';
     document.getElementById('info-teacher').textContent = data.teacherText || '--';
     document.getElementById('lesson-info').style.display = 'block';
-    setStatus('已載入 '+data.dateText+' · 共 '+data.students.length+' 位學生','ok');
-    renderAttTable(); renderAttSummaryBar();
+    
+    setStatus('已載入 ' + data.dateText + ' · 共 ' + data.students.length + ' 位學生', 'ok');
+    
+    // 重新渲染表格，確保按鈕綁定的寫入動作指向正確的欄位
+    renderAttTable(); 
+    renderAttSummaryBar();
   });
 }
 
@@ -1161,18 +1182,28 @@ function applyGeminiResults(updates) {
 // 總表頁
 // ══════════════════════════════════════════════
 function onSumClassChange() {
-  var className=document.getElementById('sum-class-sel').value;
-  summaryData=null;
-  document.getElementById('alert-cards').style.display='none';
-  document.getElementById('summary-wrap').innerHTML='<div class="loading">讀取中...</div>';
-  if(!className){document.getElementById('summary-wrap').innerHTML='<div class="empty">請選擇班級</div>';return;}
-  jsonpCall({action:'getClassSummary',className:className},function(err,data){
-    if(err||!data||data.error){document.getElementById('summary-wrap').innerHTML='<div class="empty">讀取失敗</div>';return;}
-    summaryData=data;
+  var className = document.getElementById('sum-class-sel').value;
+  summaryData = null;
+  summaryStructure = null; // 每次換班級都清空結構
+  document.getElementById('alert-cards').style.display = 'none';
+  document.getElementById('summary-wrap').innerHTML = '<div class="loading">讀取中...</div>';
+    if (!className) {
+    document.getElementById('summary-wrap').innerHTML = '<div class="empty">請選擇班級</div>';
+    return;
+  }
+  // 同步讀取結構與資料
+  jsonpCall({action:'getSummaryStructure', className:className}, function(err, struct) {
+    if (!err && struct) summaryStructure = struct;
+  });
+  jsonpCall({action:'getClassSummary', className:className}, function(err, data) {
+    if (err || !data || data.error) {
+      document.getElementById('summary-wrap').innerHTML = '<div class="empty">讀取失敗</div>';
+      return;
+    }
+    summaryData = data;
     renderSummaryTable();
   });
 }
-
 function setFilter(f) {
   currentFilter=f;
   ['all','makeup','hw'].forEach(function(id){
