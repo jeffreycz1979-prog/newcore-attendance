@@ -2035,21 +2035,17 @@ function callGeminiSummary(base64, mimeType, className) {
       return;
     }
 
-    // Debug：確認 cells 內容是否正確
-    console.log('[writeSummaryCells] className:', className);
-    console.log('[writeSummaryCells] cells:', JSON.stringify(cells));
-
     showSumStatus('⏳ 寫入中（' + cells.length + ' 格）...', 'info');
 
-    fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'writeSummaryCells', authCode: AUTH_CODE, className: className, cells: JSON.stringify(cells) })
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(res) {
+    // 改用 JSONP，避免 GAS doPost 的 CORS preflight 問題
+    jsonpCall({
+      action: 'writeSummaryCells',
+      authCode: AUTH_CODE,
+      className: className,
+      cells: JSON.stringify(cells)
+    }, function(err, res) {
+      if (err) { showSumStatus('❌ 寫入請求失敗：' + err.message, 'err'); return; }
       if (res && res.ok) {
-        // ✅ 用 studentIdx + lessonIdx 直接更新，不需要 col 比對
         if (summaryData) {
           uiUpdates.forEach(function(u) {
             var st = summaryData.students[u.studentIdx];
@@ -2063,8 +2059,7 @@ function callGeminiSummary(base64, mimeType, className) {
       } else {
         showSumStatus('❌ 寫入失敗：' + (res && res.msg || ''), 'err');
       }
-    })
-    .catch(function(e){ showSumStatus('❌ 寫入請求失敗：' + e.message, 'err'); });
+    });
   });
 }
 
