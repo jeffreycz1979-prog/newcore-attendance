@@ -2042,7 +2042,6 @@ function callGeminiSummary(base64, mimeType, className) {
       return;
     }
 
-    // --- 關鍵修正：改用 POST 進行同步寫入 ---
     showSumStatus('⏳ 正在同步至雲端試算表...', 'info');
     
     fetch(API_URL, {
@@ -2051,13 +2050,12 @@ function callGeminiSummary(base64, mimeType, className) {
         action: 'writeSummaryCells',
         authCode: AUTH_CODE,
         className: className,
-        cells: JSON.stringify(cells) // 轉為字串打包
+        cells: JSON.stringify(cells)
       })
     })
     .then(function(r){ return r.json(); })
     .then(function(r) {
       if (r && r.ok) {
-        // 後端寫入成功後，才更新前端記憶體
         cells.forEach(function(c) {
           if (!summaryData) return;
           summaryData.students.forEach(function(st) {
@@ -2069,7 +2067,7 @@ function callGeminiSummary(base64, mimeType, className) {
           });
         });
         showSumStatus('✅ 成功寫入 ' + cells.length + ' 格資料', 'ok');
-        renderSummaryTable(); // 重新繪製表格
+        renderSummaryTable();
       } else {
         showSumStatus('❌ 雲端寫入失敗：' + (r ? r.msg : '未知錯誤'), 'err');
       }
@@ -2083,7 +2081,7 @@ function callGeminiSummary(base64, mimeType, className) {
     btn.textContent = '🎤 AI 語音輸入'; btn.className = 'mic-btn'; btn.disabled = false;
     showSumStatus('❌ Gemini API 錯誤', 'err');
   });
-}
+} // <--- 確保最後只有一個結束大括號
 
     function writeBatch() {
       if (batchIdx >= batches.length) {
