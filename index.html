@@ -643,7 +643,14 @@ var currentFilter = 'all';
 var GEMINI_API_KEY = '';
 var GEMINI_URL     = '';
 function updateGeminiUrl() {
-  GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY;
+  // 優先順序：3.1 Flash-Lite (最快、配額最寬鬆)
+  // 次選：2.5 Flash-Lite (備援穩定版)
+  const primaryModel = "gemini-3.1-flash-lite-preview"; 
+  
+  // 設定 URL，讓系統直接調用最強的 Lite 模型
+  GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + primaryModel + ':generateContent?key=' + GEMINI_API_KEY;
+  
+  console.log("Gemini Engine Switched to: " + primaryModel);
 }
 
 // 錄音相關
