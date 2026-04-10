@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
 <title>NewCore 語音點名</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -102,13 +102,19 @@
   .gemini-comment { color: #666; font-size: 11px; font-style: italic; flex: 1; }
 
   /* 點名表格 */
+  .att-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .att-table { width: 100%; border-collapse: collapse; }
-  .att-table th { background: #f1f3f4; font-size: 11px; font-weight: 700; padding: 8px 4px; text-align: center; color: #666; }
-  .att-table th:first-child { text-align: left; padding-left: 10px; min-width: 110px; }
+  .att-table th { background: #f1f3f4; font-size: 11px; font-weight: 700; padding: 8px 4px; text-align: center; color: #666;
+                  position: sticky; top: 0; z-index: 2; }
+  .att-table th:first-child { text-align: left; padding-left: 10px; min-width: 110px;
+                               position: sticky; left: 0; z-index: 3; background: #f1f3f4; }
   .att-table td { padding: 7px 4px; font-size: 13px; text-align: center; border-bottom: 1px solid #f5f5f5; }
-  .att-table td:first-child { text-align: left; padding-left: 10px; }
+  .att-table td:first-child { text-align: left; padding-left: 10px;
+                               position: sticky; left: 0; z-index: 1; background: white; }
+  .att-table tr:nth-child(even) td:first-child { background: #fafafa; }
   .att-table tr:last-child td { border-bottom: none; }
-  .att-table tr.highlight td { background: #fffde7; }
+  .att-table tr.highlight td { background: #fffde7 !important; }
+  .att-table tr.highlight td:first-child { background: #fffde7 !important; }
   .name-en { font-weight: 600; font-size: 13px; color: #222; }
   .name-zh { font-size: 11px; color: #999; margin-top: 1px; }
   .sym-btn { width: 28px; height: 26px; border-radius: 5px; border: 1px solid #e0e0e0;
@@ -159,6 +165,23 @@
   .wheel-actions { display:flex; gap:10px; padding:14px 20px 0; }
   .wheel-clear   { flex:1; padding:12px; border-radius:10px; border:1px solid #ddd; background:white; font-size:14px; cursor:pointer; color:#c0392b; }
   .wheel-confirm { flex:2; padding:12px; border-radius:10px; border:none; background:#274e13; color:white; font-size:14px; font-weight:700; cursor:pointer; }
+
+  /* 九宮格鍵盤 */
+  .numpad-wrap { padding: 8px 16px 0; }
+  .numpad-display { text-align:center; font-size:42px; font-weight:700; color:#274e13;
+                    padding:8px 0 4px; min-height:60px; letter-spacing:2px; }
+  .numpad-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:8px 0; }
+  .numpad-btn { padding:16px 8px; font-size:22px; font-weight:700; border-radius:12px;
+                border:1px solid #e0e0e0; background:#f8f9fa; cursor:pointer;
+                color:#222; transition:background .1s; -webkit-tap-highlight-color:transparent; }
+  .numpad-btn:active { background:#274e13; color:white; }
+  .numpad-btn.zero { grid-column:span 2; }
+  .numpad-btn.del  { background:#fce8e6; color:#c0392b; border-color:#f5c6cb; }
+  .numpad-btn.del:active { background:#c0392b; color:white; }
+  .wheel-mode-toggle { display:flex; gap:6px; padding:0 16px 8px; }
+  .mode-btn { flex:1; padding:7px; font-size:12px; border-radius:8px; border:1px solid #ddd;
+              background:#f8f9fa; cursor:pointer; color:#666; font-weight:600; }
+  .mode-btn.active { background:#274e13; color:white; border-color:#274e13; }
 
   /* 出席符號選單 */
   .att-popup { position: fixed; z-index: 2000; background: white; border-radius: 12px;
@@ -474,10 +497,18 @@
           <button class="filter-btn"        id="filter-hw"     onclick="setFilter('hw')">📝 缺作業</button>
         </div>
       </div>
+      <div style="font-size:11px;color:#aaa;margin-top:8px;">💡 點出席格子可改符號，點分數可調整數值</div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
-        <div style="font-size:11px;color:#aaa;flex:1;">💡 點出席格子可改符號，點分數可調整數值</div>
-        <button class="mic-btn" id="sum-mic-btn" onclick="toggleSumMic()" style="flex:none;padding:8px 14px;font-size:13px;border-radius:8px;">🎤 AI 語音輸入</button>
-        <div class="rec-timer" id="sum-rec-timer" style="display:none;color:#c0392b;font-weight:700;font-size:12px;">0s</div>
+        <div style="flex:1;min-width:150px;">
+          <label style="font-size:10px;color:#aaa;margin-bottom:3px;">語音輸入目標堂次</label>
+          <select id="sum-lesson-sel" style="width:100%;padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid #ddd;background:#fafafa;">
+            <option value="">請先選班級</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button class="mic-btn" id="sum-mic-btn" onclick="toggleSumMic()" style="padding:8px 14px;font-size:13px;border-radius:8px;">🎤 語音輸入</button>
+          <div class="rec-timer" id="sum-rec-timer" style="display:none;color:#c0392b;font-weight:700;font-size:12px;">0s</div>
+        </div>
       </div>
       <div class="status-bar" id="sum-status-bar" style="margin-top:8px;display:none;"></div>
     </div>
@@ -623,15 +654,40 @@
       <div class="wheel-student" id="wheel-student-name"></div>
       <button class="wheel-close" onclick="closeWheel()">×</button>
     </div>
-    <div class="wheel-display">
-      <div class="score-big" id="wheel-score-display">--</div>
-      <div class="score-label">分數</div>
+    <!-- 模式切換 -->
+    <div class="wheel-mode-toggle">
+      <button class="mode-btn active" id="mode-numpad" onclick="switchScoreMode('numpad')">⌨️ 鍵盤</button>
+      <button class="mode-btn"        id="mode-wheel"  onclick="switchScoreMode('wheel')">🎡 滑輪</button>
     </div>
-    <div class="wheel-scroll-wrap">
-      <div class="wheel-selector"></div>
-      <div class="wheel-scroll" id="wheel-scroll"></div>
+    <!-- 九宮格鍵盤 -->
+    <div class="numpad-wrap" id="numpad-section">
+      <div class="numpad-display" id="numpad-display">--</div>
+      <div class="numpad-grid">
+        <button class="numpad-btn" onclick="numpadPress('1')">1</button>
+        <button class="numpad-btn" onclick="numpadPress('2')">2</button>
+        <button class="numpad-btn" onclick="numpadPress('3')">3</button>
+        <button class="numpad-btn" onclick="numpadPress('4')">4</button>
+        <button class="numpad-btn" onclick="numpadPress('5')">5</button>
+        <button class="numpad-btn" onclick="numpadPress('6')">6</button>
+        <button class="numpad-btn" onclick="numpadPress('7')">7</button>
+        <button class="numpad-btn" onclick="numpadPress('8')">8</button>
+        <button class="numpad-btn" onclick="numpadPress('9')">9</button>
+        <button class="numpad-btn zero" onclick="numpadPress('0')">0</button>
+        <button class="numpad-btn del"  onclick="numpadDel()">⌫</button>
+      </div>
     </div>
-    <div class="wheel-quick" id="wheel-quick"></div>
+    <!-- 滑輪（隱藏） -->
+    <div id="wheel-section" style="display:none;">
+      <div class="wheel-display">
+        <div class="score-big" id="wheel-score-display">--</div>
+        <div class="score-label">分數</div>
+      </div>
+      <div class="wheel-scroll-wrap">
+        <div class="wheel-selector"></div>
+        <div class="wheel-scroll" id="wheel-scroll"></div>
+      </div>
+      <div class="wheel-quick" id="wheel-quick"></div>
+    </div>
     <div class="wheel-actions">
       <button class="wheel-clear"   onclick="clearScore()">清除分數</button>
       <button class="wheel-confirm" onclick="confirmScore()">確認 ✓</button>
@@ -1039,7 +1095,7 @@ function renderAttTable() {
     html+='</tr>';
   }
   html+='</tbody></table>';
-  wrap.innerHTML=html;
+  wrap.innerHTML='<div class="att-table-wrap">'+html+'</div>';
 }
 
 function renderAttSummaryBar() {
@@ -1209,13 +1265,27 @@ function onSumClassChange() {
   summaryStructure = null;
   document.getElementById('alert-cards').style.display = 'none';
   document.getElementById('summary-wrap').innerHTML = '<div class="loading">讀取中...</div>';
+  document.getElementById('sum-lesson-sel').innerHTML = '<option value="">請先選班級</option>';
+
   if (!className) {
     document.getElementById('summary-wrap').innerHTML = '<div class="empty">請選擇班級</div>';
     return;
   }
+
   jsonpCall({action:'getSummaryStructure', className:className}, function(err, struct) {
-    if (!err && struct) summaryStructure = struct;
+    if (!err && struct) {
+      summaryStructure = struct;
+      // 填入堂次下拉選單，預設選最後一堂
+      var opts = '';
+      struct.lessons.forEach(function(l, i) {
+        opts += '<option value="' + i + '">' + l.unit + ' ' + l.lesson + '　' + l.date + '</option>';
+      });
+      var sel = document.getElementById('sum-lesson-sel');
+      sel.innerHTML = opts;
+      sel.selectedIndex = struct.lessons.length - 1; // 預設最後一堂
+    }
   });
+
   jsonpCall({action:'getClassSummary', className:className}, function(err, data) {
     if (err || !data || data.error) {
       document.getElementById('summary-wrap').innerHTML = '<div class="empty">讀取失敗</div>';
@@ -1416,6 +1486,50 @@ function buildWheel() {
     highlightCenter(idx);
   });
 }
+// ══════════════════════════════════════════════
+// 九宮格鍵盤邏輯
+// ══════════════════════════════════════════════
+var currentScoreMode = 'numpad'; // 'numpad' or 'wheel'
+var numpadBuffer = '';
+
+function switchScoreMode(mode) {
+  currentScoreMode = mode;
+  document.getElementById('numpad-section').style.display = mode === 'numpad' ? 'block' : 'none';
+  document.getElementById('wheel-section').style.display  = mode === 'wheel'  ? 'block' : 'none';
+  document.getElementById('mode-numpad').className = 'mode-btn' + (mode === 'numpad' ? ' active' : '');
+  document.getElementById('mode-wheel').className  = 'mode-btn' + (mode === 'wheel'  ? ' active' : '');
+  if (mode === 'wheel' && wheelValue !== null) {
+    setTimeout(function(){ document.getElementById('wheel-scroll').scrollTop = wheelValue * ITEM_HEIGHT; }, 50);
+  }
+}
+
+function numpadPress(digit) {
+  if (numpadBuffer.length >= 3) return; // 最多3位數（0-200）
+  numpadBuffer += digit;
+  document.getElementById('numpad-display').textContent = numpadBuffer || '--';
+  // 同步更新 wheelValue
+  var num = parseInt(numpadBuffer);
+  if (!isNaN(num)) {
+    wheelValue = num;
+    document.getElementById('wheel-score-display').textContent = num;
+  }
+}
+
+function numpadDel() {
+  numpadBuffer = numpadBuffer.slice(0, -1);
+  document.getElementById('numpad-display').textContent = numpadBuffer || '--';
+  if (numpadBuffer) {
+    wheelValue = parseInt(numpadBuffer);
+  } else {
+    wheelValue = null;
+  }
+}
+
+function numpadReset(initVal) {
+  numpadBuffer = initVal !== null && initVal !== undefined && initVal !== '' ? String(initVal) : '';
+  document.getElementById('numpad-display').textContent = numpadBuffer || '--';
+}
+
 function highlightCenter(val){
   document.querySelectorAll('.wheel-item[data-val]').forEach(function(el){
     el.className='wheel-item'+(parseInt(el.dataset.val)===val?' center':'');
@@ -1446,6 +1560,10 @@ function openWheel(studentIdx, mode, lessonIdx) {
   document.getElementById('wheel-student-name').textContent=name;
   document.getElementById('wheel-score-display').textContent=initVal;
   document.getElementById('wheel-overlay').style.display='flex';
+  // 初始化九宮格
+  numpadReset(initVal);
+  // 預設顯示鍵盤模式
+  switchScoreMode(currentScoreMode);
   highlightCenter(initVal);
   setTimeout(function(){document.getElementById('wheel-scroll').scrollTop=initVal*ITEM_HEIGHT;},50);
 }
@@ -1457,11 +1575,22 @@ function closeWheel(){
 function wheelOverlayClick(e){ if(e.target===document.getElementById('wheel-overlay')) closeWheel(); }
 
 function confirmScore() {
-  if(!wheelContext||wheelValue===null) return;
+  if(!wheelContext) return;
+  // 讀取分數：九宮格模式從 buffer 讀，滑輪模式從 wheelValue 讀
+  var finalScore;
+  if (currentScoreMode === 'numpad') {
+    if (!numpadBuffer) return; // 沒輸入不確認
+    finalScore = parseInt(numpadBuffer);
+    if (isNaN(finalScore)) return;
+    wheelValue = finalScore;
+  } else {
+    if (wheelValue === null) return;
+    finalScore = wheelValue;
+  }
   var ctx=wheelContext;
   if(ctx.mode==='exam'){
     var input = ctx.input;
-    input.value = wheelValue;
+    input.value = finalScore;
     onScoreInput(input);
     closeWheel();
     buildWheel();
@@ -1909,6 +2038,8 @@ function toggleSumMic() {
 function startSumRecording() {
   var className = document.getElementById('sum-class-sel').value;
   if (!className) { showSumStatus('❌ 請先選擇班級', 'err'); return; }
+  var lessonIdx = document.getElementById('sum-lesson-sel').value;
+  if (lessonIdx === '' || lessonIdx === '請先選班級') { showSumStatus('❌ 請先選擇堂次', 'err'); return; }
   if (!navigator.mediaDevices) { showSumStatus('❌ 不支援錄音', 'err'); return; }
   var doRecord = function() {
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
@@ -1968,33 +2099,23 @@ function callGeminiSummary(base64, mimeType, className) {
   var struct = summaryStructure;
   var studentRef = struct.students.map(function(s){ return s.eName || s.cName; }).join(',');
 
-  // 只取最近 6 堂（有日期的），讓 Gemini 更容易判斷正確堂次
-  var lessons = struct.lessons;
-  var recentStart = Math.max(0, lessons.length - 6);
-  var recentLessons = lessons.slice(recentStart);
-  var lessonRef = recentLessons.map(function(l, i){
-    return (recentStart + i) + ':' + l.unit + ' ' + l.lesson + '(' + l.date + ')';
-  }).join(',');
+  // 取得使用者選定的堂次
+  var selectedLessonIdx = parseInt(document.getElementById('sum-lesson-sel').value);
+  if (isNaN(selectedLessonIdx)) { showSumStatus('❌ 請先選擇堂次', 'err'); return; }
+  var selectedLesson = struct.lessons[selectedLessonIdx];
 
-  // 找最後一堂有資料的堂次作為「預設堂次」提示
-  var defaultIdx = recentStart + recentLessons.length - 1;
-  var defaultLesson = lessons[defaultIdx];
-  var defaultHint = defaultLesson
-    ? '如果老師沒有特別說明是哪一堂，請預設為最新的這堂：索引' + defaultIdx + '（' + defaultLesson.unit + ' ' + defaultLesson.lesson + ' ' + defaultLesson.date + '）'
-    : '';
-
+  // Gemini 只需辨識學生和數值，堂次由系統決定
   var prompt =
-    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席或分數，回傳純 JSON 陣列，不加任何 markdown。\n' +
+    '你是補習班助手，請聆聽錄音，辨識老師說的學生出席狀況或分數。\n' +
     '學生名單：[' + studentRef + ']\n' +
-    '最近課堂（索引:名稱日期）：[' + lessonRef + ']\n' +
-    defaultHint + '\n' +
-    '輸出格式：[{"student":"學生名或all","lessonIdx":數字,"field":"att或score","value":"值"}]\n' +
+    '本次堂次固定為索引 ' + selectedLessonIdx + '（' + selectedLesson.unit + ' ' + selectedLesson.lesson + ' ' + selectedLesson.date + '），不需要判斷堂次。\n' +
+    '輸出格式（JSON 陣列）：[{"student":"學生名或all","lessonIdx":' + selectedLessonIdx + ',"field":"att或score","value":"值"}]\n' +
     '出席符號：到=V, 缺席=○, 請假=△, 補課缺席=●, 補課請假=▲, 遲到=⊝\n' +
     '只輸出 JSON，不要其他文字。';
 
   var parts = [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }];
   callGeminiWithFallback(parts, function(err, commands) {
-    document.getElementById('sum-mic-btn').textContent = '🎤 AI 語音輸入';
+    document.getElementById('sum-mic-btn').textContent = '🎤 語音輸入';
     document.getElementById('sum-mic-btn').className = 'mic-btn';
     if (err) { showSumStatus('❌ Gemini 錯誤：' + err.message, 'err'); return; }
 
@@ -2351,6 +2472,8 @@ function openExamWheel(idx) {
   document.getElementById('wheel-student-name').textContent = name + '　' + exam.label;
   document.getElementById('wheel-score-display').textContent = initVal;
   document.getElementById('wheel-overlay').style.display = 'flex';
+  numpadReset(initVal);
+  switchScoreMode(currentScoreMode);
   buildExamWheel();
   wheelValue = initVal;
   highlightCenter(initVal);
