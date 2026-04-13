@@ -835,11 +835,11 @@ function jsonpCall(params, callback) {
 window.addEventListener('load', function() {
   if (API_URL) document.getElementById('login-api-url').value = API_URL;
   if (API_URL && AUTH_CODE) autoLogin();
-  document.addEventListener('click', function(e) {
-    if (!document.getElementById('att-popup').contains(e.target) &&
-        !e.target.classList.contains('cell-att')) closeAttPopup();
-  });
-  buildWheel();
+  document.addEventListener('mousedown', function(e) {
+  var popup = document.getElementById('att-popup');
+  if (popup.style.display === 'none') return;
+  if (!popup.contains(e.target) &&
+      !e.target.classList.contains('cell-att')) closeAttPopup();
 });
 
 function autoLogin() {
