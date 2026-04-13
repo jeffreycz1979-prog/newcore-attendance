@@ -818,37 +818,15 @@ var ATT_CLASS = {'V':'att-V','\u25cb':'att-o','\u25cf':'att-ob','\u25b3':'att-d'
 // JSONP
 // ══════════════════════════════════════════════
 function jsonpCall(params, callback) {
-  var cbName = '__ncCb' + (cbCounter++);
-  var url = API_URL + '?callback=' + cbName;
-  Object.keys(params).forEach(function(k) {
-    url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k] === null ? '' : params[k]);
-  });
+  var url = API_URL + '?' + Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] === null ? '' : params[k]);
+  }).join('&');
+  // 不帶 callback 參數，讓 GAS 回傳純 JSON
 
-  var done = false;
-  var timer = setTimeout(function() {
-    if (done) return;
-    done = true;
-    delete window[cbName];
-    if (script.parentNode) script.parentNode.removeChild(script);
-    callback(new Error('網路錯誤'));
-  }, 20000); // 20秒 timeout
-
-  window[cbName] = function(data) {
-    if (done) return;
-    done = true;
-    clearTimeout(timer);
-    delete window[cbName];
-    if (script.parentNode) script.parentNode.removeChild(script);
-    callback(null, data);
-  };
-
-  var script = document.createElement('script');
-  script.src = url;
-  // ✅ onerror 只 log，不直接 reject（Edge 的 redirect 會誤觸）
-  script.onerror = function() {
-    console.warn('[JSONP] script onerror（可能是 GAS redirect，等待 callback）:', cbName);
-  };
-  document.body.appendChild(script);
+  fetch(url, { method: 'GET', redirect: 'follow' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { callback(null, data); })
+    .catch(function(err) { callback(new Error('連線失敗：' + err.message)); });
 }
 
 // ══════════════════════════════════════════════
