@@ -841,6 +841,7 @@ window.addEventListener('load', function() {
   if (!popup.contains(e.target) &&
       !e.target.classList.contains('cell-att')) closeAttPopup();
 });
+});
 
 function autoLogin() {
   document.getElementById('login-btn').disabled = true;
@@ -1997,7 +1998,7 @@ function downloadPDF() {
   win.document.write('<div class="comment-box">'+(comment||'').replace(/\n/g,'<br>')+'</div>');
   win.document.write('<p style="font-size:11px;color:#999;text-align:right;margin-top:8px;">'+d.teacher+' 老師 簽章</p>');
   win.document.write('</div>');
-  win.document.write('<'+'script>');
+  win.document.write('\x3Cscript\x3E');
   win.document.write('window.onload=function(){');
   win.document.write('var canvas=document.getElementById("pdf-radar");');
   win.document.write('var ctx=canvas.getContext("2d");');
