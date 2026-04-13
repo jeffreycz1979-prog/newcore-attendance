@@ -1533,32 +1533,7 @@ function wheelTap(val){
   highlightCenter(val);
   document.getElementById('wheel-scroll').scrollTo({top:val*ITEM_HEIGHT,behavior:'smooth'});
 }
-function openWheel(studentIdx, mode, lessonIdx) {
-  wheelContext = { mode:mode, studentIdx:studentIdx, lessonIdx:lessonIdx };
-  var initVal = 80, name = '';
-  if (mode === 'attend') {
-    var st = classData.students[studentIdx];
-    name = (st.eName||'')+(st.eName&&st.cName?'　':'')+(st.cName||'');
-    initVal = st.score!==''?parseInt(st.score):80;
-    wheelStudentIdx = studentIdx;
-  } else {
-    var st = summaryData.students[studentIdx];
-    var rec = st.lessonRecords[lessonIdx];
-    name = (st.eName||st.cName||'') + '　' + summaryData.lessons[lessonIdx].unit + ' ' + summaryData.lessons[lessonIdx].lesson;
-    initVal = rec.score!==''?parseInt(rec.score):80;
-  }
-  if(isNaN(initVal)) initVal=80;
-  wheelValue=initVal;
-  document.getElementById('wheel-student-name').textContent=name;
-  document.getElementById('wheel-score-display').textContent=initVal;
-  document.getElementById('wheel-overlay').style.display='flex';
-  // 初始化九宮格
-  numpadReset(initVal);
-  // 預設顯示鍵盤模式
-  switchScoreMode(currentScoreMode);
-  highlightCenter(initVal);
-  setTimeout(function(){document.getElementById('wheel-scroll').scrollTop=initVal*ITEM_HEIGHT;},50);
-}
+function openWheel
 function closeWheel(){
   document.getElementById('wheel-overlay').style.display='none';
   if (wheelContext && wheelContext.mode === 'exam') buildWheel();
