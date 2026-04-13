@@ -1421,13 +1421,16 @@ function openAttPopup(event, studentIdx, lessonIdx) {
   html += '<div class="att-popup-divider"></div>';
   html += '<div class="att-popup-item" onclick="selectAttSym(\'\')" style="color:#999">✕ 清除</div>';
   popup.innerHTML = html;
-  var rect = cellEl.getBoundingClientRect();
-  popup.style.display = 'flex';
-  var top  = rect.bottom + window.scrollY + 4;
-  var left = rect.left   + window.scrollX;
-  if (left + 140 > window.innerWidth) left = window.innerWidth - 148;
-  popup.style.top  = top  + 'px';
-  popup.style.left = left + 'px';
+ var rect = cellEl.getBoundingClientRect();
+popup.style.display = 'flex';
+var top  = rect.bottom + 4;
+var left = rect.left;
+if (top + 200 > window.innerHeight) top = rect.top - 200;
+if (left + 140 > window.innerWidth) left = window.innerWidth - 148;
+if (top < 0) top = 4;
+popup.style.position = 'fixed';
+popup.style.top  = top  + 'px';
+popup.style.left = left + 'px';
 }
 
 function selectAttSym(sym) {
