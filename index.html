@@ -832,17 +832,18 @@ function jsonpCall(params, callback) {
 // ══════════════════════════════════════════════
 // 登入 / 登出
 // ══════════════════════════════════════════════
-window.addEventListener('load', function() {
-  if (API_URL) document.getElementById('login-api-url').value = API_URL;
-  if (API_URL && AUTH_CODE) autoLogin();
-  document.addEventListener('click', function(e) {
-    var popup = document.getElementById('att-popup');
-    if (popup.style.display === 'none') return;
-    if (!popup.contains(e.target) &&
-        !e.target.classList.contains('cell-att')) closeAttPopup();
-  });
+document.addEventListener('click', function(e) {
+  var popup = document.getElementById('att-popup');
+  if (popup.style.display === 'none') return;
+  var target = e.target;
+  var isCellAtt = false;
+  while (target) {
+    if (target.classList && target.classList.contains('cell-att')) { isCellAtt = true; break; }
+    if (target === document.body) break;
+    target = target.parentElement;
+  }
+  if (!popup.contains(e.target) && !isCellAtt) closeAttPopup();
 });
-
 function autoLogin() {
   document.getElementById('login-btn').disabled = true;
   document.getElementById('login-err').textContent = '自動登入中...';
